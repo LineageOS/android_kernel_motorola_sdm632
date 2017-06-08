@@ -289,7 +289,6 @@
 #define SEC_XFER_SIZE		512
 #define EXTRACT_SIZE		10
 
-#define DEBUG_RANDOM_BOOT 0
 
 #define LONGS(x) (((x) + sizeof(unsigned long) - 1)/sizeof(unsigned long))
 
@@ -1547,7 +1546,7 @@ void get_random_bytes(void *buf, int nbytes)
 {
 	__u8 tmp[CHACHA_BLOCK_SIZE] __aligned(4);
 
-#if DEBUG_RANDOM_BOOT > 0
+#ifdef CONFIG_WARN_UNSEEDED_RANDOM
 	if (!crng_ready())
 		printk(KERN_NOTICE "random: %pF get_random_bytes called "
 		       "with crng_init = %d\n", (void *) _RET_IP_, crng_init);
@@ -2144,6 +2143,12 @@ u64 get_random_u64(void)
 	    return ret;
 #endif
 
+#ifdef CONFIG_WARN_UNSEEDED_RANDOM
+	if (!crng_ready())
+		printk(KERN_NOTICE "random: %pF get_random_u64 called "
+		       "with crng_init = %d\n", (void *) _RET_IP_, crng_init);
+#endif
+
 	batch = &get_cpu_var(batched_entropy_u64);
 	if (use_lock)
 		read_lock_irqsave(&batched_entropy_reset_lock, flags);
@@ -2166,6 +2171,12 @@ u32 get_random_u32(void)
 	bool use_lock = READ_ONCE(crng_init) < 2;
 	unsigned long flags = 0;
 	struct batched_entropy *batch;
+
+#ifdef CONFIG_WARN_UNSEEDED_RANDOM
+	if (!crng_ready())
+		printk(KERN_NOTICE "random: %pF get_random_u32 called "
+		       "with crng_init = %d\n", (void *) _RET_IP_, crng_init);
+#endif
 
 	batch = &get_cpu_var(batched_entropy_u32);
 	if (use_lock)
