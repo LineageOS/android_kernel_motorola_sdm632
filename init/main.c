@@ -487,10 +487,6 @@ asmlinkage __visible void __init start_kernel(void)
 	smp_setup_processor_id();
 	debug_objects_early_init();
 
-	/*
-	 * Set up the initial canary ASAP:
-	 */
-	add_latent_entropy();
 	cgroup_init_early();
 
 	local_irq_disable();
@@ -505,8 +501,9 @@ asmlinkage __visible void __init start_kernel(void)
 	pr_notice("%s", linux_banner);
 	setup_arch(&command_line);
 	/*
-	 * Set up the the initial canary ASAP:
+	 * Set up the the initial canary and entropy after arch
 	 */
+	add_latent_entropy();
 	boot_init_stack_canary();
 	mm_init_cpumask(&init_mm);
 	setup_command_line(command_line);
