@@ -88,6 +88,7 @@ int msm_proxy_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 					struct snd_pcm_hw_params *params);
 int msm_tdm_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 			       struct snd_pcm_hw_params *params);
+int msm_madera_init(struct snd_soc_pcm_runtime *rtd);
 int msm_audrx_init(struct snd_soc_pcm_runtime *rtd);
 int msm_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
 			     struct snd_pcm_hw_params *params);
