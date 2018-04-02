@@ -6,7 +6,6 @@ else
 	KERNEL_BUILD := 0
 endif
 
-
 ifeq ($(KERNEL_BUILD), 1)
 	# These are configurable via Kconfig for kernel-based builds
 	# Need to explicitly configure for Android-based builds
@@ -75,7 +74,7 @@ UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR)
 ############ COMMON ############
 COMMON_DIR :=	include
 COMMON_INC :=	-I$(AUDIO_ROOT)/$(COMMON_DIR)
-
+MOTO_KERN_INC := -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
 ############ ASoC Drivers ############
 
 
@@ -176,7 +175,8 @@ endif
 LINUX_INC +=	-Iinclude/linux
 
 INCS +=		$(COMMON_INC) \
-		$(UAPI_INC)
+		$(UAPI_INC) \
+		$(MOTO_KERN_INC)
 
 EXTRA_CFLAGS += $(INCS)
 
