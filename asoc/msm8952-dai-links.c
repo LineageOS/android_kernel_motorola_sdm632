@@ -293,7 +293,6 @@ static struct snd_soc_dai_link msm8952_tasha_fe_dai[] = {
 	},
 };
 
-#ifndef CONFIG_SND_SOC_MADERA
 static const struct snd_soc_pcm_stream cs35l35_params = {
 	.formats = SNDRV_PCM_FMTBIT_S16_LE,
 	.rate_min = 48000,
@@ -339,7 +338,6 @@ static int cs35l35_dai_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "AMP Playback");
 	return 0;
 }
-#endif
 
 static struct snd_soc_dai_link msm8952_madera_be_dai[] = {
 	/* Backend DAI Links */
@@ -482,7 +480,6 @@ static struct snd_soc_dai_link msm8952_madera_be_dai[] = {
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
 	},
-#if 0 // TODO, disable this for the time being
 	{ /* codec to amp link */
 		.name = "MADERA-AMP",
 		.stream_name = "MADERA-AMP Playback",
@@ -512,7 +509,6 @@ static struct snd_soc_dai_link msm8952_madera_be_dai[] = {
 		.ignore_suspend = 1,
 		.params = &cs35l35_pdm_params,
 	}
-#endif
 };
 
 static struct snd_soc_dai_link msm8952_tasha_be_dai[] = {
