@@ -3303,11 +3303,9 @@ static struct snd_soc_dapm_route cs47l35_audio_paths[] = {
 	{"Slim2 Playback", NULL, "MCLK"},
 	{"Slim2 Capture", NULL, "MCLK"},
 
-#if 0 // TODO, diable it for the time being
 	{"AIF1 Playback", NULL, "AMP Capture"},
 	{"AMP Playback", NULL, "OPCLK"},
 	{"AMP Capture", NULL, "OPCLK"},
-#endif
 };
 
 static const struct snd_soc_dapm_widget msm_madera_dapm_widgets[] = {
