@@ -37,6 +37,10 @@
 #include <linux/mfd/madera/registers.h>
 #include "msm8952-slimbus.h"
 
+#ifdef CONFIG_SND_SOC_OPALUM
+#include <sound/ospl2xx.h>
+#endif
+
 #define DRV_NAME "msm8952-slimbus-wcd"
 
 #define BTSCO_RATE_8KHZ         8000
@@ -3427,6 +3431,11 @@ int msm_madera_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "Slim2 Playback");
 	snd_soc_dapm_ignore_suspend(dapm, "Slim2 Capture");
 	snd_soc_dapm_ignore_suspend(dapm, "AIF1 Capture");
+#ifdef CONFIG_SND_SOC_OPALUM
+	ret = ospl2xx_init(rtd);
+	if (ret != 0)
+		pr_err("%s Cannot set Opalum controls %d\n", __func__, ret);
+#endif
 
 	snd_soc_dapm_force_enable_pin(dapm, "SYSCLK");
 	snd_soc_dapm_sync(dapm);
