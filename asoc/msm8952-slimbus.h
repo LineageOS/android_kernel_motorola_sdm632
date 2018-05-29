@@ -30,6 +30,9 @@ enum {
 	MI2S_MAX,
 };
 
+#define MCLK_RATE_12P288	12288000
+#define SCLK_RATE_1P536  	1536000
+
 struct msm8952_codec {
 	void* (*get_afe_config_fn)(struct snd_soc_codec *codec,
 			enum afe_config_type config_type);

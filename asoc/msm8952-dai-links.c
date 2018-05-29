@@ -21,8 +21,6 @@
 #include <sound/soc/codecs/madera.h>
 
 #define DEV_NAME_STR_LEN            32
-#define CS35L35_MCLK_RATE	12288000
-#define CS35L35_SCLK_RATE	1536000
 
 /* dummy definition of below deprecated FE DAI's*/
 enum {
@@ -293,7 +291,7 @@ static struct snd_soc_dai_link msm8952_tasha_fe_dai[] = {
 	},
 };
 
-static const struct snd_soc_pcm_stream cs35l35_params = {
+static const struct snd_soc_pcm_stream cirrus_amp_params = {
 	.formats = SNDRV_PCM_FMTBIT_S16_LE,
 	.rate_min = 48000,
 	.rate_max = 48000,
@@ -301,34 +299,31 @@ static const struct snd_soc_pcm_stream cs35l35_params = {
 	.channels_max = 2,
 };
 
-static const struct snd_soc_pcm_stream cs35l35_pdm_params = {
-	.formats = SNDRV_PCM_FMTBIT_S16_LE,
-	.rate_min = 96000,
-	.rate_max = 96000,
-	.channels_min = 1,
-	.channels_max = 2,
-};
-
-static int cs35l35_dai_init(struct snd_soc_pcm_runtime *rtd)
+static int cirrus_amp_dai_init(struct snd_soc_pcm_runtime *rtd)
 {
+	int codec_clock = MCLK_RATE_12P288;
 	int ret;
-	int codec_clock = CS35L35_MCLK_RATE;
+
 	struct snd_soc_codec *codec = rtd->codec;
 	struct snd_soc_dapm_context *dapm = snd_soc_codec_get_dapm(codec);
 	struct snd_soc_dai *aif1_dai = rtd->cpu_dai;
-	struct snd_soc_dai *cs35l35_dai = rtd->codec_dai;
+	struct snd_soc_dai *amp_dai = rtd->codec_dai;
 
+	pr_debug("%s: codec dai name %s\n", __func__, amp_dai->name);
 	ret = snd_soc_dai_set_sysclk(aif1_dai, MADERA_CLK_SYSCLK, 0, 0);
 	if (ret != 0) {
 		dev_err(codec->dev, "Failed to set SYSCLK %d\n", ret);
 		return ret;
 	}
-
-	ret = snd_soc_dai_set_sysclk(cs35l35_dai, 0, CS35L35_SCLK_RATE, 0);
+	ret = snd_soc_dai_set_sysclk(amp_dai, 0, SCLK_RATE_1P536, 0);
 	if (ret != 0) {
 		dev_err(codec->dev, "Failed to set SCLK %d\n", ret);
 		return ret;
 	}
+
+	if (!strcmp(amp_dai->name, "cs35l41-pcm") ||
+		!strcmp(amp_dai->name, "cs35l36-pcm"))
+		codec_clock = SCLK_RATE_1P536;
 
 	ret = snd_soc_codec_set_sysclk(codec, 0, 0, codec_clock, 0);
 	if (ret != 0) {
@@ -336,6 +331,16 @@ static int cs35l35_dai_init(struct snd_soc_pcm_runtime *rtd)
 		return ret;
 	}
 	snd_soc_dapm_ignore_suspend(dapm, "AMP Playback");
+	if (!strcmp(amp_dai->name, "cs35l41-pcm") ||
+		!strcmp(amp_dai->name, "cs35l36-pcm")) {
+		snd_soc_dapm_ignore_suspend(dapm, "SPK");
+		snd_soc_dapm_ignore_suspend(dapm, "VP");
+		snd_soc_dapm_ignore_suspend(dapm, "AMP Enable");
+		snd_soc_dapm_ignore_suspend(dapm, "VSENSE");
+		snd_soc_dapm_ignore_suspend(dapm, "Main AMP");
+	}
+	snd_soc_dapm_sync(dapm);
+
 	return 0;
 }
 
@@ -480,35 +485,42 @@ static struct snd_soc_dai_link msm8952_madera_be_dai[] = {
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
 	},
-	{ /* codec to amp link */
+};
+
+static struct snd_soc_dai_link msm8952_cs47l35_cs35l35_dai[] = {
+	{
 		.name = "MADERA-AMP",
 		.stream_name = "MADERA-AMP Playback",
 		.cpu_name = "cs47l35-codec",
 		.cpu_dai_name = "cs47l35-aif1",
-		.codec_name = "cs35l35.2-0040",
 		.codec_dai_name = "cs35l35-pcm",
-		.init = cs35l35_dai_init,
+		.codec_name = "cs35l35.2-0040",
+		.init = cirrus_amp_dai_init,
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 			SND_SOC_DAIFMT_CBS_CFS,
 		.no_pcm = 1,
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
-		.params = &cs35l35_params,
+		.params = &cirrus_amp_params,
 	},
-	{ /* codec to amp link */
-		.name = "MADERA-PDM",
-		.stream_name = "MADERA-PDM Playback",
+};
+
+static struct snd_soc_dai_link msm8952_cs47l35_cs35l41_dai[] = {
+	{
+		.name = "MADERA-AMP",
+		.stream_name = "MADERA-AMP Playback",
 		.cpu_name = "cs47l35-codec",
-		.cpu_dai_name = "cs47l35-pdm",
-		.codec_name = "cs35l35.2-0040",
-		.codec_dai_name = "cs35l35-pdm",
-		.dai_fmt = SND_SOC_DAIFMT_PDM | SND_SOC_DAIFMT_NB_NF |
+		.cpu_dai_name = "cs47l35-aif1",
+		.codec_dai_name = "cs35l41-pcm",
+		.codec_name = "cs35l41.2-0040",
+		.init = cirrus_amp_dai_init,
+		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 			SND_SOC_DAIFMT_CBS_CFS,
 		.no_pcm = 1,
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
-		.params = &cs35l35_pdm_params,
-	}
+		.params = &cirrus_amp_params,
+	},
 };
 
 static struct snd_soc_dai_link msm8952_tasha_be_dai[] = {
@@ -1956,12 +1968,7 @@ struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 			msm8952_madera_be_dai, sizeof(msm8952_madera_be_dai));
 		msm8952_dai_links = msm8952_madera_dai_links;
 	} else if (strnstr(card->name, "tasha", strlen(card->name))) {
-#ifndef CONFIG_SND_SOC_MADERA
-		// remove symbol dependency on the tasha codec
-		 codec_ver = tasha_codec_ver();
-#else
-		codec_ver = WCD9XXX;
-#endif
+		codec_ver = tasha_codec_ver();
 		if (codec_ver == WCD9XXX)
 			return NULL;
 		if (codec_ver == WCD9326) {
@@ -2010,6 +2017,18 @@ struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		memcpy(msm8952_dai_links + len5, msm8952_tdm_be_dai_link,
 			sizeof(msm8952_tdm_be_dai_link));
 		len5 += ARRAY_SIZE(msm8952_tdm_be_dai_link);
+	}
+	if (of_property_read_bool(dev->of_node, "qcom,cs47l35-cs35l41-intf")) {
+		dev_dbg(dev, "%s(): cs47l35-cs35l41 link present\n", __func__);
+		memcpy(msm8952_dai_links + len5, msm8952_cs47l35_cs35l41_dai,
+			sizeof(msm8952_cs47l35_cs35l41_dai));
+		len5 += ARRAY_SIZE(msm8952_cs47l35_cs35l41_dai);
+	}
+	else if (of_property_read_bool(dev->of_node, "qcom,cs47l35-cs35l35-intf")) {
+		dev_dbg(dev, "%s(): cs47l35-cs35l35 link present\n", __func__);
+		memcpy(msm8952_dai_links + len5, msm8952_cs47l35_cs35l35_dai,
+			sizeof(msm8952_cs47l35_cs35l35_dai));
+		len5 += ARRAY_SIZE(msm8952_cs47l35_cs35l35_dai);
 	}
 	card->dai_link = msm8952_dai_links;
 	card->num_links = len5;
