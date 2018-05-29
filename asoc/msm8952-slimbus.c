@@ -79,9 +79,6 @@
 #define FLL_RATE_MADERA 294912000
 #define MADERA_SYSCLK_RATE (FLL_RATE_MADERA / 3)
 #define MADERA_DSPCLK_RATE (FLL_RATE_MADERA / 2)
-#define CS35L34_MCLK_RATE 6144000
-#define CS35L35_MCLK_RATE 12288000
-#define CS35L35_SCLK_RATE 1536000
 
 enum btsco_rates {
 	RATE_8KHZ_ID,
@@ -3306,7 +3303,6 @@ static struct snd_soc_dapm_route cs47l35_audio_paths[] = {
 	{"Slim1 Capture", NULL, "MCLK"},
 	{"Slim2 Playback", NULL, "MCLK"},
 	{"Slim2 Capture", NULL, "MCLK"},
-
 	{"AIF1 Playback", NULL, "AMP Capture"},
 	{"AMP Playback", NULL, "OPCLK"},
 	{"AMP Capture", NULL, "OPCLK"},
@@ -3348,7 +3344,7 @@ int msm_madera_init(struct snd_soc_pcm_runtime *rtd)
 	}
 
 	ret = snd_soc_codec_set_sysclk(codec, MADERA_CLK_OPCLK,
-			0, CS35L35_MCLK_RATE,
+			0, MCLK_RATE_12P288,
 			SND_SOC_CLOCK_OUT);
 	if (ret != 0) {
 		dev_err(codec->dev, "Failed to set OPCLK %d\n", ret);
