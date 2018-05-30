@@ -2155,14 +2155,15 @@ int msm_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+#ifdef CONFIG_SND_SOC_MADERA
 #define CS47L35_SLIM_RX_MAX	6
 #define CS47L35_SLIM_TX_MAX	6
-
 
 static unsigned int msm_slim_rx_ch[CS47L35_SLIM_RX_MAX] = {144, 145, 146, 147,
 						148, 149};
 static unsigned int msm_slim_tx_ch[CS47L35_SLIM_TX_MAX] = {128, 129, 130, 131,
 						132, 133};
+#endif
 
 int msm_snd_hw_params(struct snd_pcm_substream *substream,
 			     struct snd_pcm_hw_params *params)
@@ -2173,9 +2174,12 @@ int msm_snd_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai_link *dai_link = rtd->dai_link;
 
 	int ret = 0;
-//	u32 rx_ch[SLIM_MAX_RX_PORTS], tx_ch[SLIM_MAX_TX_PORTS];
-//	u32 rx_ch_cnt = 0, tx_ch_cnt = 0;
+#ifndef CONFIG_SND_SOC_MADERA
+	u32 rx_ch[SLIM_MAX_RX_PORTS], tx_ch[SLIM_MAX_TX_PORTS];
+	u32 rx_ch_cnt = 0, tx_ch_cnt = 0;
+#else
 	u32 tx_ch_cnt = 0;
+#endif
 	u32 user_set_tx_ch = 0;
 	u32 rx_ch_count;
 
@@ -3441,7 +3445,7 @@ out:
 	return err;
 }
 
-#if 1
+#ifdef CONFIG_SND_SOC_MADERA
 int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 {
 	return 0;
