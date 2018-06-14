@@ -197,6 +197,15 @@ endif
 ifneq (,$(filter ocean%, $(TARGET_PRODUCT)))
 CDEFINES += -DCONFIG_SND_SOC_NXP_TFA9874
 endif
+
+ifneq (,$(findstring river, $(strip $(TARGET_PRODUCT))))
+CDEFINES += -DCONFIG_SND_SOC_CS35L41
+endif
+
+ifneq (,$(findstring ali_shm2018, $(strip $(TARGET_PRODUCT))))
+CDEFINES += -DCONFIG_SND_SOC_CS35L35
+endif
+
 KBUILD_CPPFLAGS += $(CDEFINES)
 
 # Currently, for versions of gcc which support it, the kernel Makefile

@@ -21,6 +21,7 @@
 #include <sound/soc/codecs/madera.h>
 
 #define DEV_NAME_STR_LEN            32
+#define CS35L41_CODEC_NAME "cs35l41.2-0040"
 
 /* dummy definition of below deprecated FE DAI's*/
 enum {
@@ -72,6 +73,13 @@ static struct snd_soc_ops msm_tdm_be_ops = {
 	.startup = msm_tdm_startup,
 	.hw_params = msm_tdm_snd_hw_params,
 	.shutdown = msm_tdm_shutdown,
+};
+
+static struct snd_soc_codec_conf cs35l41_codec_conf[] = {
+	{
+		.dev_name       = CS35L41_CODEC_NAME,
+		.name_prefix    = "SPK",
+	},
 };
 
 static struct snd_soc_dai_link msm8952_madera_fe_dai[] = {
@@ -512,7 +520,7 @@ static struct snd_soc_dai_link msm8952_cs47l35_cs35l41_dai[] = {
 		.cpu_name = "cs47l35-codec",
 		.cpu_dai_name = "cs47l35-aif1",
 		.codec_dai_name = "cs35l41-pcm",
-		.codec_name = "cs35l41.2-0040",
+		.codec_name = CS35L41_CODEC_NAME,
 		.init = cirrus_amp_dai_init,
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 			SND_SOC_DAIFMT_CBS_CFS,
@@ -2020,6 +2028,8 @@ struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 	}
 	if (of_property_read_bool(dev->of_node, "qcom,cs47l35-cs35l41-intf")) {
 		dev_dbg(dev, "%s(): cs47l35-cs35l41 link present\n", __func__);
+		card->codec_conf = cs35l41_codec_conf;
+		card->num_configs = ARRAY_SIZE(cs35l41_codec_conf);
 		memcpy(msm8952_dai_links + len5, msm8952_cs47l35_cs35l41_dai,
 			sizeof(msm8952_cs47l35_cs35l41_dai));
 		len5 += ARRAY_SIZE(msm8952_cs47l35_cs35l41_dai);
