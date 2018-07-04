@@ -30,6 +30,10 @@
 #include <sound/ospl2xx.h>
 #endif
 
+#ifdef CONFIG_SND_SOC_TAS2560
+#include <sound/tas2560_algo.h>
+#endif
+
 #ifdef CONFIG_SND_SOC_NXP_TFA9874
 #define AFE_MODULE_ID_TFADSP_RX		(0x1000B911)
 #define AFE_MODULE_ID_TFADSP_TX		(0x1000B912)
@@ -156,6 +160,18 @@ int ospl2xx_afe_set_callback(
 	return 0;
 }
 EXPORT_SYMBOL(ospl2xx_afe_set_callback);
+#endif
+
+#ifdef CONFIG_SND_SOC_TAS2560
+int32_t (*tas2560_algo_callback)(struct apr_client_data *data);
+
+int tas2560_algo_afe_set_callback(
+	int32_t (*tas2560_algo_callback_func)(struct apr_client_data *data))
+{
+	tas2560_algo_callback = tas2560_algo_callback_func;
+	return 0;
+}
+EXPORT_SYMBOL(tas2560_algo_afe_set_callback);
 #endif
 
 #define TIMEOUT_MS 1000
@@ -391,8 +407,16 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 	afe_callback_debug_print(data);
 	if (data->opcode == AFE_PORT_CMDRSP_GET_PARAM_V2) {
 		uint32_t *payload = data->payload;
+#if defined(CONFIG_SND_SOC_TAS2560)
+		int32_t *payload32 = data->payload;
 
-#if defined(CONFIG_SND_SOC_OPALUM)
+		if ((payload32[1] == AFE_TAS2560_ALGO_MODULE_RX) ||
+		     (payload32[1] == AFE_TAS2560_ALGO_MODULE_TX)) {
+			if (tas2560_algo_callback != NULL)
+				tas2560_algo_callback(data);
+			atomic_set(&this_afe.state, 0);
+		} else {
+#elif defined(CONFIG_SND_SOC_OPALUM)
 		int32_t *payload32 = data->payload;
 
 		if (payload32[1] == AFE_CUSTOM_OPALUM_RX_MODULE ||
@@ -442,7 +466,7 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 			wake_up(&this_afe.wait[data->token]);
 		else
 			return -EINVAL;
-#if defined(CONFIG_SND_SOC_OPALUM)
+#if defined(CONFIG_SND_SOC_OPALUM) || defined(CONFIG_SND_SOC_TAS2560)
 		}
 #endif
 	} else if (data->payload_size) {
@@ -925,6 +949,17 @@ int ospl2xx_afe_apr_send_pkt(void *data, int index)
 	return ret;
 }
 EXPORT_SYMBOL(ospl2xx_afe_apr_send_pkt);
+#endif
+
+#ifdef CONFIG_SND_SOC_TAS2560
+int tas2560_algo_afe_apr_send_pkt(void *data, int index)
+{
+	int ret = 0;
+
+	ret = afe_apr_send_pkt(data, &this_afe.wait[index]);
+	return ret;
+}
+EXPORT_SYMBOL(tas2560_algo_afe_apr_send_pkt);
 #endif
 
 static int afe_send_cal_block(u16 port_id, struct cal_block_data *cal_block)

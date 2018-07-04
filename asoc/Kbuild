@@ -206,6 +206,10 @@ ifneq (,$(findstring ali_shm2018, $(strip $(TARGET_PRODUCT))))
 CDEFINES += -DCONFIG_SND_SOC_CS35L35
 endif
 
+ifneq (,$(filter channel%, $(TARGET_PRODUCT)))
+CDEFINES += -DCONFIG_SND_SOC_TAS2560
+endif
+
 KBUILD_CPPFLAGS += $(CDEFINES)
 
 # Currently, for versions of gcc which support it, the kernel Makefile
