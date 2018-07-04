@@ -338,9 +338,14 @@ static int cirrus_amp_dai_init(struct snd_soc_pcm_runtime *rtd)
 		dev_err(codec->dev, "Failed to set MCLK %d\n", ret);
 		return ret;
 	}
-	snd_soc_dapm_ignore_suspend(dapm, "AMP Playback");
-	if (!strcmp(amp_dai->name, "cs35l41-pcm") ||
-		!strcmp(amp_dai->name, "cs35l36-pcm")) {
+	if (!strcmp(amp_dai->name, "cs35l41-pcm")) {
+		snd_soc_dapm_ignore_suspend(dapm, "SPK AMP Playback");
+		snd_soc_dapm_ignore_suspend(dapm, "SPK SPK");
+		snd_soc_dapm_ignore_suspend(dapm, "SPK VP");
+		snd_soc_dapm_ignore_suspend(dapm, "SPK VSENSE");
+		snd_soc_dapm_ignore_suspend(dapm, "SPK Main AMP");
+	} else {
+		snd_soc_dapm_ignore_suspend(dapm, "AMP Playback");
 		snd_soc_dapm_ignore_suspend(dapm, "SPK");
 		snd_soc_dapm_ignore_suspend(dapm, "VP");
 		snd_soc_dapm_ignore_suspend(dapm, "AMP Enable");
