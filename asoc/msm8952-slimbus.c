@@ -3790,10 +3790,13 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card;
 	struct msm8952_asoc_mach_data *pdata = NULL;
+#ifndef CONFIG_SND_SOC_MADERA
 	const char *ext_pa = "qcom,msm-ext-pa";
 	const char *ext_pa_str = NULL;
 	int num_strings = 0;
-	int ret, i;
+	int i;
+#endif
+	int ret;
 	struct resource *muxsel;
 
 	pdata = devm_kzalloc(&pdev->dev,
@@ -3950,6 +3953,9 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 			ret);
 		goto err;
 	}
+	pr_info("%s: sound card register successfully\n", __func__);
+
+#ifndef CONFIG_SND_SOC_MADERA
 	num_strings = of_property_count_strings(pdev->dev.of_node,
 						ext_pa);
 	if (num_strings < 0) {
@@ -3973,7 +3979,6 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 			pdata->ext_pa = (pdata->ext_pa | QUIN_MI2S_ID);
 	}
 
-#ifndef CONFIG_SND_SOC_MADERA
 	/* Parse US-Euro gpio info from DT. Report no error if us-euro
 	 * entry is not found in DT file as some targets do not support
 	 * US-Euro detection
