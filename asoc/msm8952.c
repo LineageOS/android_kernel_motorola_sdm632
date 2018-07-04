@@ -31,6 +31,10 @@
 #include "codecs/msm-cdc-pinctrl.h"
 #include "msm8952.h"
 
+#ifdef CONFIG_SND_SOC_TAS2560
+#include <sound/tas2560_algo.h>
+#endif
+
 #define DRV_NAME "msm8952-asoc-wcd"
 
 #define MSM_INT_DIGITAL_CODEC "msm-dig-codec"
@@ -1708,6 +1712,16 @@ struct snd_soc_dai_link_component dlc_vifeed[] = {
 	},
 };
 
+#ifdef CONFIG_SND_SOC_TAS2560
+static int tas2560_dai_init(struct snd_soc_pcm_runtime *rtd)
+{
+	int ret = 0;
+
+	ret = tas2560_algo_routing_init(rtd);
+	return ret;
+}
+#endif
+
 /* Digital audio interface glue - connects codec <---> CPU */
 static struct snd_soc_dai_link msm8952_dai[] = {
 	/* FrontEnd DAI Links */
@@ -2713,6 +2727,56 @@ static struct snd_soc_dai_link msm8952_hdmi_dba_dai_link[] = {
 	},
 };
 
+static struct snd_soc_dai_link msm8952_tas2560_quin_dai_link[] = {
+        {
+                .name = LPASS_BE_QUIN_MI2S_RX,
+                .stream_name = "Quinary MI2S Playback",
+                .cpu_dai_name = "msm-dai-q6-mi2s.4",
+                .platform_name = "msm-pcm-routing",
+                .codec_dai_name = "tas2560 ASI1",
+                .codec_name = "tas2560.2-004f",
+#ifdef CONFIG_SND_SOC_TAS2560
+                .init = &tas2560_dai_init,
+#endif
+                .no_pcm = 1,
+                .dpcm_playback = 1,
+                .id = MSM_BACKEND_DAI_QUINARY_MI2S_RX,
+                .be_hw_params_fixup = msm_mi2s_rx_be_hw_params_fixup,
+                .ops = &msm8952_quin_mi2s_be_ops,
+                .ignore_pmdown_time = 1, /* dai link has playback support */
+                .ignore_suspend = 1,
+        },
+	{
+		.name = LPASS_BE_QUIN_MI2S_TX,
+		.stream_name = "Quinary MI2S Capture",
+		.cpu_dai_name = "msm-dai-q6-mi2s.4",
+		.platform_name = "msm-pcm-routing",
+		.codec_dai_name = "tas2560 ASI1",
+		.codec_name = "tas2560.2-004f",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.id = MSM_BACKEND_DAI_QUINARY_MI2S_TX,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &msm8952_quin_mi2s_be_ops,
+		.ignore_suspend = 1,
+	},
+	{ /* hw:x, 41 */
+		.name = "QUIN_MI2S_TX Hostless",
+		.stream_name = "Quinary MI2S_TX Hostless",
+		.cpu_dai_name = "QUIN_MI2S_TX_HOSTLESS",
+		.platform_name = "msm-pcm-hostless",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+				SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		.codec_dai_name = "snd-soc-dummy-dai",
+		.codec_name = "snd-soc-dummy",
+	},
+};
+
 static struct snd_soc_dai_link msm8952_quin_dai_link[] = {
 	{
 		.name = LPASS_BE_QUIN_MI2S_RX,
@@ -2757,6 +2821,12 @@ ARRAY_SIZE(msm8952_split_a2dp_dai_link)];
 static struct snd_soc_dai_link msm8952_tfa9874_dai_links[
 ARRAY_SIZE(msm8952_dai) +
 ARRAY_SIZE(msm8952_tfa9874_quin_dai_link) +
+ARRAY_SIZE(msm8952_hdmi_dba_dai_link) +
+ARRAY_SIZE(msm8952_split_a2dp_dai_link)];
+
+static struct snd_soc_dai_link msm8952_tas2560_dai_links[
+ARRAY_SIZE(msm8952_dai) +
+ARRAY_SIZE(msm8952_tas2560_quin_dai_link) +
 ARRAY_SIZE(msm8952_hdmi_dba_dai_link) +
 ARRAY_SIZE(msm8952_split_a2dp_dai_link)];
 
@@ -3034,6 +3104,15 @@ static struct snd_soc_card *msm8952_populate_sndcard_dailinks(
 		memcpy(dailink + len1, msm8952_tfa9874_quin_dai_link,
 				sizeof(msm8952_tfa9874_quin_dai_link));
 		len1 += ARRAY_SIZE(msm8952_tfa9874_quin_dai_link);
+	} else if (of_property_read_bool(dev->of_node,
+				"ti,have-tas2560")) {
+		len1 = ARRAY_SIZE(msm8952_dai);
+		memcpy(msm8952_tas2560_dai_links, msm8952_dai, sizeof(msm8952_dai));
+		dailink = msm8952_tas2560_dai_links;
+
+		memcpy(dailink + len1, msm8952_tas2560_quin_dai_link,
+				sizeof(msm8952_tas2560_quin_dai_link));
+		len1 += ARRAY_SIZE(msm8952_tas2560_quin_dai_link);
 	} else {
 		len1 = ARRAY_SIZE(msm8952_dai);
 		memcpy(msm8952_dai_links, msm8952_dai, sizeof(msm8952_dai));
