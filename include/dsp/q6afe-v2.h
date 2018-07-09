@@ -398,12 +398,6 @@ void afe_set_routing_callback(routing_cb cb);
 int afe_get_av_dev_drift(struct afe_param_id_dev_timing_stats *timing_stats,
 		u16 port);
 
-#ifdef CONFIG_SND_SOC_OPALUM
-int ospl2xx_afe_set_callback(int32_t (*ospl2xx_callback_func)
-				(struct apr_client_data *data));
-int ospl2xx_afe_apr_send_pkt(void *data, int index);
-#endif
-
 #ifdef CONFIG_SND_SOC_TAS2560
 int tas2560_algo_afe_set_callback(
 	int32_t (*tas2560_algo_callback_func)(struct apr_client_data *data));

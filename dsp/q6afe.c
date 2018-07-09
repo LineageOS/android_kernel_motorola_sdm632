@@ -26,9 +26,6 @@
 #include <ipc/apr_tal.h>
 #include "adsp_err.h"
 #include <dsp/q6core.h>
-#ifdef CONFIG_SND_SOC_OPALUM
-#include <sound/ospl2xx.h>
-#endif
 
 #ifdef CONFIG_SND_SOC_TAS2560
 #include <sound/tas2560_algo.h>
@@ -149,18 +146,6 @@ static atomic_t afe_ports_mad_type[SLIMBUS_PORT_LAST - SLIMBUS_0_RX];
 static unsigned long afe_configured_cmd;
 
 static struct afe_ctl this_afe;
-
-#ifdef CONFIG_SND_SOC_OPALUM
-int32_t (*ospl2xx_callback)(struct apr_client_data *data);
-
-int ospl2xx_afe_set_callback(
-	int32_t (*ospl2xx_callback_func)(struct apr_client_data *data))
-{
-	ospl2xx_callback = ospl2xx_callback_func;
-	return 0;
-}
-EXPORT_SYMBOL(ospl2xx_afe_set_callback);
-#endif
 
 #ifdef CONFIG_SND_SOC_TAS2560
 int32_t (*tas2560_algo_callback)(struct apr_client_data *data);
@@ -416,15 +401,6 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 				tas2560_algo_callback(data);
 			atomic_set(&this_afe.state, 0);
 		} else {
-#elif defined(CONFIG_SND_SOC_OPALUM)
-		int32_t *payload32 = data->payload;
-
-		if (payload32[1] == AFE_CUSTOM_OPALUM_RX_MODULE ||
-		    payload32[1] == AFE_CUSTOM_OPALUM_TX_MODULE) {
-			if (ospl2xx_callback != NULL)
-				ospl2xx_callback(data);
-			atomic_set(&this_afe.state, 0);
-		} else {
 #endif
 		if (!payload || (data->token >= AFE_MAX_PORTS)) {
 			pr_err("%s: Error: size %d payload %pK token %d\n",
@@ -466,7 +442,7 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 			wake_up(&this_afe.wait[data->token]);
 		else
 			return -EINVAL;
-#if defined(CONFIG_SND_SOC_OPALUM) || defined(CONFIG_SND_SOC_TAS2560)
+#if defined(CONFIG_SND_SOC_TAS2560)
 		}
 #endif
 	} else if (data->payload_size) {
@@ -934,22 +910,6 @@ static int afe_apr_send_pkt(void *data, wait_queue_head_t *wait)
 	pr_debug("%s: leave %d\n", __func__, ret);
 	return ret;
 }
-
-#ifdef CONFIG_SND_SOC_OPALUM
-int ospl2xx_afe_apr_send_pkt(void *data, int index)
-{
-	int ret = 0;
-
-	ret = afe_q6_interface_prepare();
-	if (ret != 0) {
-		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
-		return -EINVAL;
-	}
-	ret = afe_apr_send_pkt(data, &this_afe.wait[index]);
-	return ret;
-}
-EXPORT_SYMBOL(ospl2xx_afe_apr_send_pkt);
-#endif
 
 #ifdef CONFIG_SND_SOC_TAS2560
 int tas2560_algo_afe_apr_send_pkt(void *data, int index)
@@ -4280,7 +4240,6 @@ int afe_get_port_index(u16 port_id)
 		return -EINVAL;
 	}
 }
-EXPORT_SYMBOL(afe_get_port_index);
 
 /**
  * afe_open -
