@@ -67,7 +67,7 @@ endif
 ############ UAPI ############
 UAPI_DIR :=	uapi
 UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR)
-MOT_INC :=	-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+
 ############ COMMON ############
 COMMON_DIR :=	include
 COMMON_INC :=	-I$(AUDIO_ROOT)/$(COMMON_DIR)
@@ -114,8 +114,7 @@ endif
 LINUX_INC +=	-Iinclude/linux
 
 INCS +=		$(COMMON_INC) \
-		$(UAPI_INC) \
-		$(MOT_INC)
+		$(UAPI_INC)
 
 EXTRA_CFLAGS += $(INCS)
 
