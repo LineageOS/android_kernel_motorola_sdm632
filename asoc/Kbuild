@@ -199,7 +199,7 @@ CDEFINES += -DCONFIG_SND_SOC_NXP_TFA9874
 endif
 
 ifneq (,$(findstring river, $(strip $(TARGET_PRODUCT))))
-CDEFINES += -DCONFIG_SND_SOC_CS35L41
+CDEFINES += -DCONFIG_SND_SOC_CS35L41 -DCONFIG_CIRRUS_PLAYBACK
 endif
 
 ifneq (,$(findstring ali_shm2018, $(strip $(TARGET_PRODUCT))))

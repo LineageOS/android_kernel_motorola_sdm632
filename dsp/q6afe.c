@@ -30,6 +30,9 @@
 #ifdef CONFIG_SND_SOC_TAS2560
 #include <sound/tas2560_algo.h>
 #endif
+#ifdef CONFIG_CIRRUS_PLAYBACK
+#include <sound/msm-cirrus-playback.h>
+#endif
 
 #ifdef CONFIG_SND_SOC_NXP_TFA9874
 #define AFE_MODULE_ID_TFADSP_RX		(0x1000B911)
@@ -157,6 +160,18 @@ int tas2560_algo_afe_set_callback(
 	return 0;
 }
 EXPORT_SYMBOL(tas2560_algo_afe_set_callback);
+#endif
+
+#ifdef CONFIG_CIRRUS_PLAYBACK
+int32_t (*crus_afe_callback)(void *payload, int size);
+
+extern int crus_afe_set_callback(
+	int32_t (*crus_afe_callback_func)(void *payload, int size))
+{
+	crus_afe_callback = crus_afe_callback_func;
+	return 0;
+}
+EXPORT_SYMBOL(crus_afe_set_callback);
 #endif
 
 #define TIMEOUT_MS 1000
@@ -422,6 +437,11 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 		if (payload[2] == AFE_PARAM_ID_DEV_TIMING_STATS) {
 			av_dev_drift_afe_cb_handler(data->payload,
 						    data->payload_size);
+#if defined(CONFIG_CIRRUS_PLAYBACK)
+                } else if (payload[1] == CIRRUS_SE) {
+                        crus_afe_callback(data->payload, data->payload_size);
+                        atomic_set(&this_afe.state, 0);
+#endif
 		} else {
 #ifdef CONFIG_SND_SOC_NXP_TFA9874
 			if (atomic_read(&this_afe.tfa_state) == 1) {
@@ -920,6 +940,21 @@ int tas2560_algo_afe_apr_send_pkt(void *data, int index)
 	return ret;
 }
 EXPORT_SYMBOL(tas2560_algo_afe_apr_send_pkt);
+#endif
+
+#ifdef CONFIG_CIRRUS_PLAYBACK
+extern int afe_apr_send_pkt_crus(void *data, int index)
+{
+	int ret = 0;
+
+	ret = afe_q6_interface_prepare();
+	if (ret != 0) {
+		pr_err("%s: Q6 interface prepare failed %d\n", __func__, ret);
+		return -EINVAL;
+	}
+	return afe_apr_send_pkt(data, &this_afe.wait[index]);
+}
+EXPORT_SYMBOL(afe_apr_send_pkt_crus);
 #endif
 
 static int afe_send_cal_block(u16 port_id, struct cal_block_data *cal_block)
@@ -4240,7 +4275,7 @@ int afe_get_port_index(u16 port_id)
 		return -EINVAL;
 	}
 }
-#ifdef CONFIG_SND_SOC_TAS2560
+#if defined (CONFIG_SND_SOC_TAS2560) || defined (CONFIG_CIRRUS_PLAYBACK)
 EXPORT_SYMBOL(afe_get_port_index);
 #endif
 
