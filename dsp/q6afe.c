@@ -4240,6 +4240,9 @@ int afe_get_port_index(u16 port_id)
 		return -EINVAL;
 	}
 }
+#ifdef CONFIG_SND_SOC_TAS2560
+EXPORT_SYMBOL(afe_get_port_index);
+#endif
 
 /**
  * afe_open -
