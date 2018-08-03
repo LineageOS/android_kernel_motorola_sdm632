@@ -69,10 +69,12 @@
 #define CRUS_SE_IOCTL_GET	_IOWR(SPK_ENHA_IOCTL_MAGIC, 219, void *)
 #define CRUS_SE_IOCTL_SET	_IOWR(SPK_ENHA_IOCTL_MAGIC, 220, void *)
 
+#ifdef CONFIG_COMPAT
 #define CRUS_SE_IOCTL_GET32		_IOWR(SPK_ENHA_IOCTL_MAGIC, 219, \
 	compat_uptr_t)
 #define CRUS_SE_IOCTL_SET32		_IOWR(SPK_ENHA_IOCTL_MAGIC, 220, \
 	compat_uptr_t)
+#endif
 
 struct crus_se_ioctl_header {
 	uint32_t size;
