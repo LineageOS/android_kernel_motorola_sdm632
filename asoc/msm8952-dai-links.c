@@ -299,12 +299,21 @@ static struct snd_soc_dai_link msm8952_tasha_fe_dai[] = {
 	},
 };
 
-static const struct snd_soc_pcm_stream cirrus_amp_params = {
-	.formats = SNDRV_PCM_FMTBIT_S16_LE,
-	.rate_min = 48000,
-	.rate_max = 48000,
-	.channels_min = 1,
-	.channels_max = 2,
+static const struct snd_soc_pcm_stream cirrus_amp_params[] = {
+	{
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.rate_min = 48000,
+		.rate_max = 48000,
+		.channels_min = 2,
+		.channels_max = 2,  /* 2 channels for 1.536MHz SCLK */
+	},
+	{
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.rate_min = 96000,
+		.rate_max = 96000,
+		.channels_min = 2,
+		.channels_max = 2, /* 2 channels for 3.072MHz SCLK */
+	},
 };
 
 static int cirrus_amp_dai_init(struct snd_soc_pcm_runtime *rtd)
@@ -514,7 +523,7 @@ static struct snd_soc_dai_link msm8952_cs47l35_cs35l35_dai[] = {
 		.no_pcm = 1,
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
-		.params = &cirrus_amp_params,
+		.params = &cirrus_amp_params[0],
 	},
 };
 
@@ -532,7 +541,8 @@ static struct snd_soc_dai_link msm8952_cs47l35_cs35l41_dai[] = {
 		.no_pcm = 1,
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
-		.params = &cirrus_amp_params,
+		.params = &cirrus_amp_params[0],
+		.num_params = ARRAY_SIZE(cirrus_amp_params),
 	},
 };
 
