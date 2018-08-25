@@ -398,16 +398,6 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 	afe_callback_debug_print(data);
 	if (data->opcode == AFE_PORT_CMDRSP_GET_PARAM_V2) {
 		uint32_t *payload = data->payload;
-#if defined(CONFIG_SND_SOC_TAS2560)
-		int32_t *payload32 = data->payload;
-
-		if ((payload32[1] == AFE_TAS2560_ALGO_MODULE_RX) ||
-		     (payload32[1] == AFE_TAS2560_ALGO_MODULE_TX)) {
-			if (tas2560_algo_callback != NULL)
-				tas2560_algo_callback(data);
-			atomic_set(&this_afe.state, 0);
-		} else {
-#endif
 		if (!payload || (data->token >= AFE_MAX_PORTS)) {
 			pr_err("%s: Error: size %d payload %pK token %d\n",
 				__func__, data->payload_size,
@@ -422,6 +412,13 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
                 } else if (payload[1] == CIRRUS_SE) {
                         crus_afe_callback(data->payload, data->payload_size);
                         atomic_set(&this_afe.state, 0);
+#endif
+#if defined(CONFIG_SND_SOC_TAS2560)
+		} else if ((payload[1] == AFE_TAS2560_ALGO_MODULE_RX) ||
+			   (payload[1] == AFE_TAS2560_ALGO_MODULE_TX)) {
+			if (tas2560_algo_callback != NULL)
+				tas2560_algo_callback(data);
+			atomic_set(&this_afe.state, 0);
 #endif
 		} else {
 			if (rtac_make_afe_callback(data->payload,
@@ -443,9 +440,6 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 						 data->payload_size))
 				return -EINVAL;
 		}
-#if defined(CONFIG_SND_SOC_TAS2560)
-		}
-#endif
 		wake_up(&this_afe.wait[data->token]);
 	} else if (data->payload_size) {
 		uint32_t *payload;
