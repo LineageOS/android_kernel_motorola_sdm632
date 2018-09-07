@@ -3422,8 +3422,8 @@ int msm_madera_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "SPKOUTP");
 	snd_soc_dapm_ignore_suspend(dapm, "SPKDATL");
 	snd_soc_dapm_ignore_suspend(dapm, "SPKDATR");
-	snd_soc_dapm_ignore_suspend(dapm, "DSP2 Virtual Output");
-	snd_soc_dapm_ignore_suspend(dapm, "DSP3 Virtual Output");
+	snd_soc_dapm_ignore_suspend(dapm, "DSP2 Trigger Out");
+	snd_soc_dapm_ignore_suspend(dapm, "DSP3 Trigger Out");
 	snd_soc_dapm_ignore_suspend(dapm, "DSP Virtual Input");
 
 	snd_soc_dapm_ignore_suspend(dapm, "Slim1 Playback");
