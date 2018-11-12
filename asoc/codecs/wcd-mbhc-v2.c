@@ -560,7 +560,7 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 
 	WCD_MBHC_RSC_ASSERT_LOCKED(mbhc);
 
-	pr_debug("%s: enter insertion %d hph_status %x\n",
+	pr_info("%s: enter insertion %d hph_status %x\n",
 		 __func__, insertion, mbhc->hph_status);
 	if (!insertion) {
 		/* Report removal */
@@ -598,7 +598,7 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 
 		mbhc->hph_type = WCD_MBHC_HPH_NONE;
 		mbhc->zl = mbhc->zr = 0;
-		pr_debug("%s: Reporting removal %d(%x)\n", __func__,
+		pr_info("%s: Reporting removal %d(%x)\n", __func__,
 			 jack_type, mbhc->hph_status);
 		wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
 				mbhc->hph_status, WCD_MBHC_JACK_MASK);
@@ -683,7 +683,7 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			is_pa_on = mbhc->mbhc_cb->hph_pa_on_status(codec);
 
 		WCD_MBHC_REG_READ(WCD_MBHC_ELECT_RESULT, elect_result);
-		pr_debug("%s: elect_result: %d\n", __func__, elect_result);
+		pr_info("%s: elect_result: %d\n", __func__, elect_result);
 
 		if (mbhc->impedance_detect &&
 			mbhc->mbhc_cb->compute_impedance &&
@@ -716,7 +716,7 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 							mbhc->hph_status,
 							WCD_MBHC_JACK_MASK);
 				}
-				pr_debug("%s: Marking jack type as SND_JACK_LINEOUT\n",
+				pr_info("%s: Marking jack type as SND_JACK_LINEOUT\n",
 				__func__);
 			} else if (((mbhc->zl > mbhc->mbhc_cfg->selfstick_th &&
 				mbhc->zl < MAX_IMPED) &&
@@ -734,10 +734,10 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 
 		if ((jack_type == SND_JACK_LINEOUT) && elect_result) {
 			mbhc->hph_status = 0;
-			pr_debug("%s: DTV dongle detected\n", __func__);
+			pr_info("%s: DTV dongle detected\n", __func__);
 		}
 
-		pr_debug("%s: Reporting insertion %d(%x),zl %d ohm,zr %d ohm\n", __func__,
+		pr_info("%s: Reporting insertion %d(%x),zl %d ohm,zr %d ohm\n", __func__,
 			 jack_type, mbhc->hph_status, mbhc->zl, mbhc->zr);
 		wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
 				    (mbhc->hph_status | SND_JACK_MECHANICAL),
@@ -1000,7 +1000,7 @@ static irqreturn_t wcd_mbhc_mech_plug_detect_irq(int irq, void *data)
 	int r = IRQ_HANDLED;
 	struct wcd_mbhc *mbhc = data;
 
-	pr_debug("%s: enter\n", __func__);
+	pr_info("%s: enter\n", __func__);
 	if (unlikely((mbhc->mbhc_cb->lock_sleep(mbhc, true)) == false)) {
 		pr_warn("%s: failed to hold suspend\n", __func__);
 		r = IRQ_NONE;
