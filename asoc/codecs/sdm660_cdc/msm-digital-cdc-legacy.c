@@ -116,11 +116,10 @@ static int msm_digcdc_clock_control(bool flag)
 				snd_soc_codec_get_drvdata(registered_digcodec);
 
 	pdata = snd_soc_card_get_drvdata(registered_digcodec->component.card);
-
 	if (flag) {
 		mutex_lock(&pdata->cdc_int_mclk0_mutex);
 		if (atomic_read(&pdata->int_mclk0_enabled) == false) {
-			if (msm_dig_cdc->regmap->cache_only == true)
+			if ((msm_dig_cdc->regmap->cache_only == true) && msm_dig_cdc->is_ssr)
 				return ret;
 			pdata->digital_cdc_core_clk.clk_freq_in_hz =
 							DEFAULT_MCLK_RATE;
@@ -129,14 +128,18 @@ static int msm_digcdc_clock_control(bool flag)
 						AFE_PORT_ID_PRIMARY_MI2S_RX,
 						&pdata->digital_cdc_core_clk);
 			if (ret < 0) {
-				pr_err("%s:failed to enable the MCLK\n",
-				       __func__);
+				pr_err("%s:failed to enable the MCLK, ret = %d\n",
+				       __func__, ret);
 				/*
 				 * Avoid access to lpass register
 				 * as clock enable failed during SSR.
 				 */
 				msm_dig_cdc->regmap->cache_only = true;
+				if (ret == -ENODEV)
+					msm_dig_cdc->is_ssr = true;
 				return ret;
+			} else {
+				msm_dig_cdc->regmap->cache_only = false;
 			}
 			pr_debug("enabled digital codec core clk\n");
 			atomic_set(&pdata->int_mclk0_enabled, true);
@@ -1151,6 +1154,7 @@ static int msm_dig_cdc_event_notify(struct notifier_block *block,
 		mutex_unlock(&pdata->cdc_int_mclk0_mutex);
 		break;
 	case DIG_CDC_EVENT_SSR_UP:
+		msm_dig_cdc->is_ssr = false;
 		regcache_cache_only(msm_dig_cdc->regmap, false);
 		regcache_mark_dirty(msm_dig_cdc->regmap);
 
