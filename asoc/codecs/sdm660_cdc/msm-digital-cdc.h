@@ -96,6 +96,7 @@ struct msm_dig_priv {
 	u32 num_of_supplies;
 	struct regulator_bulk_data *supplies;
 	struct dig_cdc_regulator regulator[MAX_REGULATOR];
+	bool is_ssr;
 };
 
 struct dig_ctrl_platform_data {
