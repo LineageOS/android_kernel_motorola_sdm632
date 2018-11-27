@@ -194,7 +194,7 @@ ifneq (,$(filter river% ali_shm2018%, $(TARGET_PRODUCT)))
 CDEFINES += -DCONFIG_SND_SOC_MADERA -DCONFIG_MFD_CS47L35
 endif
 
-ifneq (,$(filter ocean%, $(TARGET_PRODUCT)))
+ifneq (,$(filter ocean% surf%, $(TARGET_PRODUCT)))
 CDEFINES += -DCONFIG_SND_SOC_NXP_TFA9874
 endif
 
