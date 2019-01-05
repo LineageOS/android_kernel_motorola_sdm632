@@ -750,6 +750,23 @@ EXPORT_SYMBOL(wcd_mbhc_report_plug);
 
 void wcd_mbhc_elec_hs_report_unplug(struct wcd_mbhc *mbhc)
 {
+	u32 zl_temp = 0, zr_temp = 0;
+	u8 fsm_en_temp = 0;
+	u8 is_pa_hphl_on = 0;
+	struct snd_soc_codec *codec;
+	struct snd_soc_card *card;
+	u8 is_seperate_headphone = 0;
+
+	codec = mbhc->codec;
+	card = codec->component.card;
+
+	if (of_find_property(card->dev->of_node,
+		"qcom,msm-mbhc-seperate-headphone-dtv",
+		NULL)) {
+		is_seperate_headphone = 1;
+		pr_debug("%s: need to seperate headphone or dtv dongle\n", __func__);
+	}
+
 	/* cancel pending button press */
 	if (wcd_cancel_btn_work(mbhc))
 		pr_debug("%s: button press is canceled\n", __func__);
@@ -760,30 +777,98 @@ void wcd_mbhc_elec_hs_report_unplug(struct wcd_mbhc *mbhc)
 	else
 		pr_info("%s: hs_detect_plug work not cancelled\n", __func__);
 
-	pr_debug("%s: Report extension cable\n", __func__);
-	wcd_mbhc_report_plug(mbhc, 1, SND_JACK_LINEOUT);
-	/*
-	 * If PA is enabled HPHL schmitt trigger can
-	 * be unreliable, make sure to disable it
-	 */
-	if (test_bit(WCD_MBHC_EVENT_PA_HPHL,
-		&mbhc->event_state))
-		wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
-	/*
-	 * Disable HPHL trigger and MIC Schmitt triggers.
-	 * Setup for insertion detection.
-	 */
-	wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_REM,
-			     false);
-	wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_NONE);
-	/* Disable HW FSM */
-	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 0);
-	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 3);
+	if(is_seperate_headphone) {
+		if (test_bit(WCD_MBHC_EVENT_PA_HPHL,
+			&mbhc->event_state)) {
+			wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+			is_pa_hphl_on =1;
+		}
+		msleep(100);
 
-	/* Set the detection type appropriately */
-	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_DETECTION_TYPE, 1);
-	wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_INS,
-			     true);
+		/* judge hphl&hphr registers to seperate headphone or DTV dongle */
+		WCD_MBHC_REG_READ(WCD_MBHC_FSM_EN, fsm_en_temp);
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 0);
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_MUX_CTL,
+					 0);
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 1);
+		mbhc->mbhc_cb->compute_impedance(mbhc,
+				&zl_temp, &zr_temp);
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN,
+					 fsm_en_temp);
+
+		msleep(100);
+
+		if(is_pa_hphl_on) {
+			is_pa_hphl_on = 0;
+			wcd_mbhc_clr_and_turnon_hph_padac(mbhc);
+			msleep(100);
+		}
+
+		if((zl_temp > 10000) && (zr_temp > 10000)) {
+			pr_debug("%s: is DTV Dongle\n", __func__);
+			wcd_mbhc_report_plug(mbhc, 1, SND_JACK_LINEOUT);
+
+			/*
+			* If PA is enabled HPHL schmitt trigger can
+			* be unreliable, make sure to disable it
+			*/
+			if (test_bit(WCD_MBHC_EVENT_PA_HPHL,
+				&mbhc->event_state))
+				wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+
+		}
+		else {
+			pr_debug("%s: is headphone\n", __func__);
+			wcd_mbhc_report_plug(mbhc, 1, SND_JACK_HEADPHONE);
+		}
+
+		/*
+		* Disable HPHL trigger and MIC Schmitt triggers.
+		* Setup for insertion detection.
+		*/
+		wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_REM,
+				     false);
+		wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_NONE);
+		/* Disable HW FSM */
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 0);
+
+		if((zl_temp > 10000) && (zr_temp > 10000)) {
+			WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 3);
+			/* Set the detection type appropriately */
+			WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_DETECTION_TYPE, 1);
+			wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_INS,
+					     true);
+		}
+		else {
+			WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 0);
+		}
+	}
+	else {
+		pr_debug("%s: Report extension cable\n", __func__);
+		wcd_mbhc_report_plug(mbhc, 1, SND_JACK_LINEOUT);
+		/*
+		 * If PA is enabled HPHL schmitt trigger can
+		 * be unreliable, make sure to disable it
+		 */
+		if (test_bit(WCD_MBHC_EVENT_PA_HPHL,
+			&mbhc->event_state))
+			wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+		/*
+		 * Disable HPHL trigger and MIC Schmitt triggers.
+		 * Setup for insertion detection.
+		 */
+		wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_REM,
+				     false);
+		wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_NONE);
+		/* Disable HW FSM */
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 0);
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 3);
+
+		/* Set the detection type appropriately */
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_DETECTION_TYPE, 1);
+		wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_INS,
+				     true);
+	}
 }
 EXPORT_SYMBOL(wcd_mbhc_elec_hs_report_unplug);
 
