@@ -50,7 +50,6 @@
 
 #include <linux/compat.h>
 #include "compat_qseecom.h"
-#include <linux/kthread.h>
 
 #define QSEECOM_DEV			"qseecom"
 #define QSEOS_VERSION_14		0x14
@@ -139,11 +138,6 @@ enum qseecom_ce_hw_instance {
 	CLK_QSEE = 0,
 	CLK_CE_DRV,
 	CLK_INVALID,
-};
-
-enum qseecom_listener_unregister_kthread_state {
-	LSNR_UNREG_KT_SLEEP = 0,
-	LSNR_UNREG_KT_WAKEUP,
 };
 
 static struct class *driver_class;
@@ -294,12 +288,6 @@ struct qseecom_control {
 	atomic_t qseecom_state;
 	int is_apps_region_protected;
 	bool smcinvoke_support;
-
-	struct list_head  unregister_lsnr_pending_list_head;
-	wait_queue_head_t register_lsnr_pending_wq;
-	struct task_struct *unregister_lsnr_kthread_task;
-	wait_queue_head_t unregister_lsnr_kthread_wq;
-	atomic_t unregister_lsnr_kthread_state;
 };
 
 struct qseecom_sec_buf_fd_info {
@@ -1177,14 +1165,8 @@ static int __qseecom_set_sb_memory(struct qseecom_registered_listener_list *svc,
 
 	resp.result = QSEOS_RESULT_INCOMPLETE;
 
-	mutex_unlock(&listener_access_lock);
-	mutex_lock(&app_access_lock);
-	__qseecom_reentrancy_check_if_no_app_blocked(
-				TZ_OS_REGISTER_LISTENER_SMCINVOKE_ID);
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1, cmd_buf, cmd_len,
 					 &resp, sizeof(resp));
-	mutex_unlock(&app_access_lock);
-	mutex_lock(&listener_access_lock);
 	if (ret) {
 		pr_err("qseecom_scm_call failed with err: %d\n", ret);
 		return -EINVAL;
@@ -1286,14 +1268,8 @@ static int qseecom_unregister_listener(struct qseecom_dev_handle *data)
 	req.listener_id = data->listener.id;
 	resp.result = QSEOS_RESULT_INCOMPLETE;
 
-	mutex_unlock(&listener_access_lock);
-	mutex_lock(&app_access_lock);
-	__qseecom_reentrancy_check_if_no_app_blocked(
-				TZ_OS_DEREGISTER_LISTENER_ID);
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1, &req,
 					sizeof(req), &resp, sizeof(resp));
-	mutex_unlock(&app_access_lock);
-	mutex_lock(&listener_access_lock);
 	if (ret) {
 		pr_err("scm_call() failed with err: %d (lstnr id=%d)\n",
 				ret, data->listener.id);
@@ -1306,6 +1282,10 @@ static int qseecom_unregister_listener(struct qseecom_dev_handle *data)
 		ret = -EPERM;
 		goto exit;
 	}
+
+	data->abort = 1;
+	ptr_svc->abort = 1;
+	wake_up_all(&ptr_svc->rcv_req_wq);
 
 	while (atomic_read(&data->ioctl_count) > 1) {
 		if (wait_event_freezable(data->abort_wq,
@@ -1329,105 +1309,6 @@ exit:
 	data->released = true;
 	pr_warn("Service %d is unregistered\n", data->listener.id);
 	return ret;
-}
-
-static int qseecom_unregister_listener(struct qseecom_dev_handle *data)
-{
-	struct qseecom_registered_listener_list *ptr_svc = NULL;
-	struct qseecom_unregister_pending_list *entry = NULL;
-
-	ptr_svc = __qseecom_find_svc(data->listener.id);
-	if (!ptr_svc) {
-		pr_err("Unregiser invalid listener ID %d\n", data->listener.id);
-		return -ENODATA;
-	}
-	/* stop CA thread waiting for listener response */
-	ptr_svc->abort = 1;
-	wake_up_interruptible_all(&qseecom.send_resp_wq);
-
-	/* stop listener thread waiting for listener request */
-	data->abort = 1;
-	wake_up_all(&ptr_svc->rcv_req_wq);
-
-	/* return directly if pending*/
-	if (ptr_svc->unregister_pending)
-		return 0;
-
-	/*add unregistration into pending list*/
-	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
-	if (!entry)
-		return -ENOMEM;
-	entry->data = data;
-	list_add_tail(&entry->list,
-		&qseecom.unregister_lsnr_pending_list_head);
-	ptr_svc->unregister_pending = true;
-	pr_debug("unregister %d pending\n", data->listener.id);
-	return 0;
-}
-
-static void __qseecom_processing_pending_lsnr_unregister(void)
-{
-	struct qseecom_unregister_pending_list *entry = NULL;
-	struct qseecom_registered_listener_list *ptr_svc = NULL;
-	struct list_head *pos;
-	int ret = 0;
-
-	mutex_lock(&listener_access_lock);
-	while (!list_empty(&qseecom.unregister_lsnr_pending_list_head)) {
-		pos = qseecom.unregister_lsnr_pending_list_head.next;
-		entry = list_entry(pos,
-				struct qseecom_unregister_pending_list, list);
-		if (entry && entry->data) {
-			pr_debug("process pending unregister %d\n",
-					entry->data->listener.id);
-			/* don't process if qseecom_release is not called*/
-			if (!entry->data->listener.release_called)
-				break;
-			ptr_svc = __qseecom_find_svc(
-						entry->data->listener.id);
-			if (ptr_svc) {
-				ret = __qseecom_unregister_listener(
-						entry->data, ptr_svc);
-				if (ret == -EBUSY) {
-					pr_debug("unregister %d pending again\n",
-						entry->data->listener.id);
-					mutex_unlock(&listener_access_lock);
-					return;
-				}
-			} else
-				pr_err("invalid listener %d\n",
-					entry->data->listener.id);
-			kzfree(entry->data);
-		}
-		list_del(pos);
-		kzfree(entry);
-	}
-	mutex_unlock(&listener_access_lock);
-	wake_up_interruptible(&qseecom.register_lsnr_pending_wq);
-}
-
-static void __wakeup_unregister_listener_kthread(void)
-{
-	atomic_set(&qseecom.unregister_lsnr_kthread_state,
-				LSNR_UNREG_KT_WAKEUP);
-	wake_up_interruptible(&qseecom.unregister_lsnr_kthread_wq);
-}
-
-static int __qseecom_unregister_listener_kthread_func(void *data)
-{
-	while (!kthread_should_stop()) {
-		wait_event_freezable(
-			qseecom.unregister_lsnr_kthread_wq,
-			atomic_read(&qseecom.unregister_lsnr_kthread_state)
-				== LSNR_UNREG_KT_WAKEUP);
-		pr_debug("kthread to unregister listener is called %d\n",
-			atomic_read(&qseecom.unregister_lsnr_kthread_state));
-		__qseecom_processing_pending_lsnr_unregister();
-		atomic_set(&qseecom.unregister_lsnr_kthread_state,
-				LSNR_UNREG_KT_SLEEP);
-	}
-	pr_warn("kthread to unregister listener stopped\n");
-	return 0;
 }
 
 static int __qseecom_set_msm_bus_request(uint32_t mode)
@@ -4612,8 +4493,6 @@ int qseecom_start_app(struct qseecom_handle **handle,
 	uint32_t fw_size, app_arch;
 	uint32_t app_id = 0;
 
-	__wakeup_unregister_listener_kthread();
-
 	if (atomic_read(&qseecom.qseecom_state) != QSEECOM_STATE_READY) {
 		pr_err("Not allowed to be called in %d state\n",
 				atomic_read(&qseecom.qseecom_state));
@@ -4787,8 +4666,6 @@ int qseecom_shutdown_app(struct qseecom_handle **handle)
 	unsigned long flags = 0;
 	bool found_handle = false;
 
-	__wakeup_unregister_listener_kthread();
-
 	if (atomic_read(&qseecom.qseecom_state) != QSEECOM_STATE_READY) {
 		pr_err("Not allowed to be called in %d state\n",
 				atomic_read(&qseecom.qseecom_state));
@@ -4836,8 +4713,6 @@ int qseecom_send_command(struct qseecom_handle *handle, void *send_buf,
 	struct qseecom_send_cmd_req req = {0, 0, 0, 0};
 	struct qseecom_dev_handle *data;
 	bool perf_enabled = false;
-
-	__wakeup_unregister_listener_kthread();
 
 	if (atomic_read(&qseecom.qseecom_state) != QSEECOM_STATE_READY) {
 		pr_err("Not allowed to be called in %d state\n",
@@ -7151,11 +7026,6 @@ static long qseecom_ioctl(struct file *file,
 		pr_err("Aborting qseecom driver\n");
 		return -ENODEV;
 	}
-	if (cmd != QSEECOM_IOCTL_RECEIVE_REQ &&
-		cmd != QSEECOM_IOCTL_SEND_RESP_REQ &&
-		cmd != QSEECOM_IOCTL_SEND_MODFD_RESP &&
-		cmd != QSEECOM_IOCTL_SEND_MODFD_RESP_64)
-		__wakeup_unregister_listener_kthread();
 
 	switch (cmd) {
 	case QSEECOM_IOCTL_REGISTER_LISTENER_REQ: {
@@ -8750,8 +8620,6 @@ static int qseecom_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&qseecom.registered_kclient_list_head);
 	spin_lock_init(&qseecom.registered_kclient_list_lock);
 	init_waitqueue_head(&qseecom.send_resp_wq);
-	init_waitqueue_head(&qseecom.register_lsnr_pending_wq);
-	init_waitqueue_head(&qseecom.unregister_lsnr_kthread_wq);
 	qseecom.send_resp_flag = 0;
 
 	qseecom.qsee_version = QSEEE_VERSION_00;
@@ -8952,17 +8820,6 @@ static int qseecom_probe(struct platform_device *pdev)
 	if (!qseecom.qsee_perf_client)
 		pr_err("Unable to register bus client\n");
 
-	/*create a kthread to process pending listener unregister task */
-	qseecom.unregister_lsnr_kthread_task = kthread_run(
-			__qseecom_unregister_listener_kthread_func,
-			NULL, "qseecom-unreg-lsnr");
-	if (IS_ERR(qseecom.unregister_lsnr_kthread_task)) {
-		pr_err("failed to create kthread to unregister listener\n");
-		rc = -EINVAL;
-		goto exit_deinit_clock;
-	}
-	atomic_set(&qseecom.unregister_lsnr_kthread_state,
-					LSNR_UNREG_KT_SLEEP);
 	atomic_set(&qseecom.qseecom_state, QSEECOM_STATE_READY);
 	return 0;
 
@@ -9078,8 +8935,6 @@ static int qseecom_remove(struct platform_device *pdev)
 	}
 
 	ion_client_destroy(qseecom.ion_clnt);
-
-	kthread_stop(qseecom.unregister_lsnr_kthread_task);
 
 	cdev_del(&qseecom.cdev);
 
