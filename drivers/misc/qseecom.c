@@ -591,8 +591,7 @@ static int qseecom_scm_call2(uint32_t svc_id, uint32_t tz_cmd_id,
 			smc_id = TZ_OS_REGISTER_LISTENER_SMCINVOKE_ID;
 			__qseecom_reentrancy_check_if_no_app_blocked(smc_id);
 			ret = scm_call2(smc_id, &desc);
-			if (ret == -EIO) {
-				/* smcinvoke is not supported */
+			if (ret) {
 				qseecom.smcinvoke_support = false;
 				smc_id = TZ_OS_REGISTER_LISTENER_ID;
 				__qseecom_reentrancy_check_if_no_app_blocked(
