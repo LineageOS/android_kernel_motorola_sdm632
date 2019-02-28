@@ -2017,7 +2017,7 @@ static int __qseecom_process_reentrancy_blocked_on_listener(
 	}
 
 	/* find app_id & img_name from list */
-	if (!ptr_app && data->client.app_arch != ELFCLASSNONE) {
+	if (!ptr_app) {
 		spin_lock_irqsave(&qseecom.registered_app_list_lock, flags);
 		list_for_each_entry(ptr_app, &qseecom.registered_app_list_head,
 							list) {
