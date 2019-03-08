@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2670,7 +2670,8 @@ static int cam_ife_csid_sof_irq_debug(
 
 	if (csid_reg->ipp_reg) {
 		val = cam_io_r_mb(soc_info->reg_map[0].mem_base +
-			csid_reg->ipp_reg->csid_ipp_irq_mask_addr);
+				csid_reg->ipp_reg->csid_ipp_irq_mask_addr);
+
 		if (val) {
 			if (sof_irq_enable)
 				val |= CSID_PATH_INFO_INPUT_SOF;
