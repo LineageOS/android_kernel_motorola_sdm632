@@ -2731,7 +2731,7 @@ static void wcd_imped_config(struct snd_soc_codec *codec,
 		case CAJON_2_0:
 		case DIANGU:
 		case DRAX_CDC:
-			if (value >= 13) {
+			if (value > 36) {
 				snd_soc_update_bits(codec,
 					MSM89XX_PMIC_ANALOG_RX_EAR_CTL,
 					0x20, 0x20);
