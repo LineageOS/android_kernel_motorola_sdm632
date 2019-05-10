@@ -74,9 +74,15 @@ UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR)
 ############ COMMON ############
 COMMON_DIR :=	include
 COMMON_INC :=	-I$(AUDIO_ROOT)/$(COMMON_DIR)
-MOTO_KERN_INC := -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules -I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
-############ ASoC Drivers ############
 
+########### MADERA ############
+MADERA_INC :=   -I$(TOP)/vendor/cirrus/audio/dlkm \
+		-I$(TOP)/vendor/cirrus/audio/dlkm/include
+
+########### MOT ############
+MOT_INC := -I$(TOP)/motorola/kernel/modules/include
+
+############ ASoC Drivers ############
 
 # for SDM6xx sound card driver
 ifdef CONFIG_SND_SOC_SDM670
@@ -176,7 +182,8 @@ LINUX_INC +=	-Iinclude/linux
 
 INCS +=		$(COMMON_INC) \
 		$(UAPI_INC) \
-		$(MOTO_KERN_INC)
+		$(MADERA_INC) \
+		$(MOT_INC)
 
 EXTRA_CFLAGS += $(INCS)
 
