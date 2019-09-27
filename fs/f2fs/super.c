@@ -2455,12 +2455,8 @@ static int init_percpu_info(struct f2fs_sb_info *sbi)
 	if (err)
 		return err;
 
-	err = percpu_counter_init(&sbi->total_valid_inode_count, 0,
+	return percpu_counter_init(&sbi->total_valid_inode_count, 0,
 								GFP_KERNEL);
-	if (err)
-		percpu_counter_destroy(&sbi->alloc_valid_block_count);
-
-	return err;
 }
 
 #ifdef CONFIG_BLK_DEV_ZONED
@@ -2849,7 +2845,6 @@ try_onemore:
 	/* init f2fs-specific super block info */
 	sbi->valid_super_block = valid_super_block;
 	mutex_init(&sbi->gc_mutex);
-	mutex_init(&sbi->writepages);
 	mutex_init(&sbi->cp_mutex);
 	init_rwsem(&sbi->node_write);
 	init_rwsem(&sbi->node_change);
@@ -2871,7 +2866,7 @@ try_onemore:
 					GFP_KERNEL);
 		if (!sbi->write_io[i]) {
 			err = -ENOMEM;
-			goto free_bio_info;
+			goto free_options;
 		}
 
 		for (j = HOT; j < n; j++) {
