@@ -139,6 +139,10 @@ ifneq (,$(filter channel%, $(TARGET_PRODUCT)))
 CDEFINES += -DCONFIG_SND_SOC_TAS2560
 endif
 
+ifneq (,$(filter ginna%, $(TARGET_PRODUCT)))
+CDEFINES += -DCONFIG_TAS25XX_ALGO
+endif
+
 ifneq (,$(filter river%, $(TARGET_PRODUCT)))
 CDEFINES += -DCONFIG_CIRRUS_PLAYBACK
 endif
