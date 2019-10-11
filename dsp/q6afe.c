@@ -9,6 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+
 #include <linux/slab.h>
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
@@ -4812,8 +4813,6 @@ static int32_t tas_smartamp_algo_callback(uint32_t *payload, uint32_t payload_si
 	struct afe_smartamp_calib_get_resp *resp =
 		(struct afe_smartamp_calib_get_resp *) payload;
 
-    pr_info("%s: payload_size = %d\n", __func__, payload_size);
-
 	if (!(&(resp->pdata))) {
 		pr_err("[TI-SmartPA:%s] Error: resp pdata is NULL", __func__);
 		return -EINVAL;
@@ -4828,7 +4827,7 @@ static int32_t tas_smartamp_algo_callback(uint32_t *payload, uint32_t payload_si
 			  this_afe.tas_calib_data.status);
 		atomic_set(&this_afe.state, -1);
 	}
-    pr_info("%s: exit!\n", __func__);
+
 	return 0;
 }
 
@@ -4845,8 +4844,6 @@ int afe_tas_smartamp_get_calib_data(uint32_t module_id, uint32_t param_id,
 	int index = 0, port_id = TAS_RX_PORT;
 	struct afe_smartamp_get_calib calib_resp_o;
 	struct afe_smartamp_get_calib* calib_resp = &calib_resp_o;
-
-    pr_info("%s: module_id = 0x%02x, param_id = %d, length = %d\n", __func__, module_id, param_id, length);
 
 	if (!data || (length <= 0)) {
 		pr_err("[TI-SmartPA: %s] Invalid params\n", __func__);
@@ -4911,13 +4908,10 @@ int afe_tas_smartamp_get_calib_data(uint32_t module_id, uint32_t param_id,
 	}
 	if (atomic_read(&this_afe.status) != 0) {
         pr_err("[TI-SmartPA %s]: config cmd failed, this_afe.status=%d\n", __func__, atomic_read(&this_afe.status));
-		//ret = -EINVAL;
-		ret = adsp_err_get_lnx_err_code(
-				atomic_read(&this_afe.status));
+		ret = -EINVAL;
 		goto fail_cmd;
 	}
 
-    pr_info("%s: enter line %d\n", __func__, __LINE__);
 	if (length >= sizeof (this_afe.tas_calib_data.res_cfg)) {
 		memcpy(data, &this_afe.tas_calib_data.res_cfg,
 		       sizeof(this_afe.tas_calib_data.res_cfg));
@@ -4926,9 +4920,8 @@ int afe_tas_smartamp_get_calib_data(uint32_t module_id, uint32_t param_id,
 		ret = 0;
 		memcpy(data, &this_afe.tas_calib_data.res_cfg, length);
 	}
-
+	pr_info("[TI-SmartPA: %s] ret=%d", __func__, ret);
 fail_cmd:
-    pr_info("[TI-SmartPA: %s] ret=%d", __func__, ret);
 	return ret;
 }
 EXPORT_SYMBOL(afe_tas_smartamp_get_calib_data);
@@ -4943,9 +4936,6 @@ int afe_tas_smartamp_set_calib_data(uint32_t module_id, uint32_t param_id,
 	int index = 0 , port_id = 0;
 	struct afe_smartamp_config_command configV;
 	struct afe_smartamp_config_command *config;
-
-    pr_info("%s: module_id = 0x%02x, param_id = %d, length = %d\n",
-           __func__, module_id, param_id, length);
 
 	config = &configV;
 	memset(config, 0 , sizeof(struct afe_smartamp_config_command));
@@ -4972,7 +4962,9 @@ int afe_tas_smartamp_set_calib_data(uint32_t module_id, uint32_t param_id,
 	//header
 	config->hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
 				APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
-	config->hdr.pkt_size = sizeof(struct afe_smartamp_config_command);
+	config->hdr.pkt_size = sizeof(struct afe_smartamp_config_command)
+					- sizeof(struct afe_smartamp_get_set_params_t)
+					+ length;
 	config->hdr.src_port = 0;
 	config->hdr.dest_port = 0;
 	config->hdr.token = index;
@@ -4982,7 +4974,9 @@ int afe_tas_smartamp_set_calib_data(uint32_t module_id, uint32_t param_id,
 	config->param.port_id = q6audio_get_port_id(port_id);
 	config->param.payload_size = sizeof(struct afe_smartamp_config_command)
 					- sizeof(struct apr_hdr)
-					- sizeof(struct afe_port_cmd_set_param_v2);
+					- sizeof(struct afe_port_cmd_set_param_v2)
+					- sizeof(struct afe_smartamp_get_set_params_t)
+					+ length;
 
 	//data
 	config->pdata.module_id = module_id;
@@ -5016,9 +5010,7 @@ int afe_tas_smartamp_set_calib_data(uint32_t module_id, uint32_t param_id,
 	}
 	if (atomic_read(&this_afe.status) != 0) {
 		pr_err("[TI-SmartPA %s]: config cmd failed, this_afe.status=%d\n", __func__, atomic_read(&this_afe.status));
-		//ret = -EINVAL;
-		ret = adsp_err_get_lnx_err_code(
-				atomic_read(&this_afe.status));
+		ret = -EINVAL;
 		goto fail_cmd;
 	}
         ret = 0;
