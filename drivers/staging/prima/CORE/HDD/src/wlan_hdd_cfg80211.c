@@ -15364,14 +15364,7 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
     {
          aborted = true;
     }
-
-    if (!aborted) {
-        //Begin Mot IKHSS7-28961 : Dont allow sleep so that supplicant
-        // can fetch scan results before kerenel ages it out if slept immediately
-        // and sleep duration is more than the ageout time.
-        hdd_prevent_suspend_after_scan(HZ/4);
-       //END IKHSS7-28961
-    }
+    
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
     if (NET_DEV_IS_IFF_UP(pAdapter) &&
         wlan_hdd_cfg80211_validate_scan_req(req, pHddCtx))

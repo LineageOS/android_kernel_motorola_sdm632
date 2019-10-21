@@ -181,7 +181,6 @@ static const hdd_freq_chan_map_t freq_chan_map[] = { {2412, 1}, {2417, 2},
 
 // BEGIN IKSWM-15907, Motorola, w18918
 #define WE_SET_CHANNEL_RANGE 90
-#define WE_SET_IPV6_FILTER_STATE 91
 // END IKSWM-15907, Motorola, w18918
 
 /* Private ioctls and their sub-ioctls */
@@ -6277,14 +6276,6 @@ static int __iw_setint_getnone(struct net_device *dev,
             ret = hdd_set_dynamic_aggregation(set_value, pAdapter);
             break;
         }
-        // IKJB42MAIN-1244, Motorola, a19091  -- BEGIN
-        case WE_SET_IPV6_FILTER_STATE:
-        {
-             hddLog(LOGE, "Revieeved ioctl WE_SET_IPV6_FILTER_STATE");
-            ret = wlan_hdd_set_v6_filter(pAdapter, set_value, TRUE);
-            break;
-        }
-        // IKJB42MAIN-1244, Motorola, a19091  -- END
         default:
         {
             hddLog(LOGE, "Invalid IOCTL setvalue command %d value %d",
@@ -9086,16 +9077,46 @@ static int iw_set_keepalive_params(struct net_device *dev,
 }
 
 #ifdef WLAN_FEATURE_PACKET_FILTERING
+/**-----------------------------------------------------------------
+
+  \brief hdd_pkt_filter_done - callback to be executed on completion
+                               successful/failure) for clear filter request.
+
+  \return -  None
+
+  --------------------------------------------------------------------------*/
+static void hdd_pkt_filter_done(void *data, v_U32_t status)
+{
+	struct hdd_request *request;
+
+	hddLog(VOS_TRACE_LEVEL_INFO,
+		FL("Pkt Filter Clear Status : %d"), status);
+
+	request = hdd_request_get(data);
+	if (!request) {
+		hddLog(VOS_TRACE_LEVEL_ERROR, FL("Obsolete request"));
+		if (ioctl_debug)
+			pr_info("%s: Obsolete request", __func__);
+		return;
+	}
+
+	hdd_request_complete(request);
+	hdd_request_put(request);
+}
+
 int wlan_hdd_set_filter(hdd_adapter_t *pAdapter, tpPacketFilterCfg pRequest)
 {
     hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
     hdd_station_ctx_t *pHddStaCtx = &pAdapter->sessionCtx.station;
     tSirRcvPktFilterCfgType    packetFilterSetReq = {0};
     tSirRcvFltPktClearParam    packetFilterClrReq = {0};
-    //IKHSS7-35965, a19091, Motorola changes -- BEGIN
-    int retVal=0;
-    //IKHSS7-35965, a19091, Motorola changes -- END
     int i=0, status;
+    void *cookie;
+    struct hdd_request *request;
+    static const struct hdd_request_params params = {
+        .priv_size = 0,
+        .timeout_ms = PKT_FILTER_TIMEOUT,
+    };
 
     status = wlan_hdd_validate_context(pHddCtx);
     if (0 != status)
@@ -9105,7 +9126,7 @@ int wlan_hdd_set_filter(hdd_adapter_t *pAdapter, tpPacketFilterCfg pRequest)
     {
         hddLog(VOS_TRACE_LEVEL_FATAL, "%s: Packet Filtering Disabled. Returning ",
                 __func__ );
-        return retVal;
+        return 0;
     }
     if (pHddCtx->isLogpInProgress)
     {
@@ -9128,10 +9149,7 @@ int wlan_hdd_set_filter(hdd_adapter_t *pAdapter, tpPacketFilterCfg pRequest)
             {
                 hddLog(VOS_TRACE_LEVEL_ERROR, "%s: Number of Params exceed Max limit %d",
                         __func__, pRequest->numParams);
-				//IKHSS7-35965, a19091, Motorola changes -- BEGIN
-				retVal = -EINVAL;
-				break;
-				//IKHSS7-35965, a19091, Motorola changes -- END
+                return -EINVAL;
             }
             packetFilterSetReq.numFieldParams = pRequest->numParams;
             packetFilterSetReq.coalesceTime = 0;
@@ -9174,7 +9192,7 @@ int wlan_hdd_set_filter(hdd_adapter_t *pAdapter, tpPacketFilterCfg pRequest)
             {
                 hddLog(VOS_TRACE_LEVEL_ERROR, "%s: Failure to execute Set Filter",
                         __func__);
-                retVal = -EINVAL; //IKHSS7-35965, a19091, Motorola
+                return -EINVAL;
             }
 
             WLANTL_SetDataPktFilter((WLAN_HDD_GET_CTX(pAdapter))->pvosContext,
@@ -9192,13 +9210,34 @@ int wlan_hdd_set_filter(hdd_adapter_t *pAdapter, tpPacketFilterCfg pRequest)
                                  pHddStaCtx->conn_info.staId[0]);
             }
 
-            packetFilterClrReq.filterId = pRequest->filterId;
+            request = hdd_request_alloc(&params);
+            if (!request) {
+                hddLog(VOS_TRACE_LEVEL_ERROR, FL("Request allocation failure"));
+                return VOS_STATUS_E_NOMEM;
+            }
+            cookie = hdd_request_cookie(request);
 
-            if (eHAL_STATUS_SUCCESS != sme_ReceiveFilterClearFilter(pHddCtx->hHal, &packetFilterClrReq, pAdapter->sessionId))
+            packetFilterClrReq.cbCtx = cookie;
+            packetFilterClrReq.filterId = pRequest->filterId;
+            packetFilterClrReq.pktFilterCallback = hdd_pkt_filter_done;
+            if (eHAL_STATUS_SUCCESS != sme_ReceiveFilterClearFilter(
+                                                         pHddCtx->hHal,
+                                                         &packetFilterClrReq,
+                                                         pAdapter->sessionId))
             {
                 hddLog(VOS_TRACE_LEVEL_ERROR, "%s: Failure to execute Clear Filter",
                         __func__);
-                retVal = -EINVAL; //IKHSS7-35965, a19091, Motorola
+                hdd_request_put(request);
+                return -EINVAL;
+            }
+
+            status = hdd_request_wait_for_response(request);
+            hdd_request_put(request);
+            if (status)
+            {
+               hddLog(LOGE, FL("failure waiting for pkt_filter_comp_var %d"),
+                                status);
+               return -EINVAL;
             }
 
             WLANTL_SetDataPktFilter((WLAN_HDD_GET_CTX(pAdapter))->pvosContext,
@@ -9208,11 +9247,10 @@ int wlan_hdd_set_filter(hdd_adapter_t *pAdapter, tpPacketFilterCfg pRequest)
         default :
             hddLog(VOS_TRACE_LEVEL_INFO_HIGH, "%s: Packet Filter Request: Invalid %d",
                     __func__, pRequest->filterAction);
-            retVal = -EINVAL; //IKHSS7-35965, a19091, Motorola
+            return -EINVAL;
     }
-    return retVal;
+    return 0;
 }
-
 
 int wlan_hdd_setIPv6Filter(hdd_context_t *pHddCtx, tANI_U8 filterType,
                            tANI_U8 sessionId)
@@ -9397,86 +9435,12 @@ int wlan_hdd_setIPv6Filter(hdd_context_t *pHddCtx, tANI_U8 filterType,
     return 0;
 }
 
-// IKJB42MAIN-1244, Motorola, a19091 - BEGIN
-#define SET_FILTER_BMAP(filter_map, set, index) { if(set){(filter_map)|=(1<<(index));}\
-    else {(filter_map)&=(~(1<<(index)));}}
-
-#define IS_FILTER_INDEX_FREE(filter_map, index) (((filter_map)&(1<<(index)))==0)
-
-#define IPV6_CONFIG_ALLOW_ALL 1
-#define IPV6_CONFIG_MANDATORY 0
-
-void wlan_hdd_set_mc_v6(hdd_adapter_t *pAdapter, v_U8_t set) {
-    tPacketFilterCfg request = {0};
-    v_SCHAR_t mcFilterIndex = WLAN_HDD_MAX_FILTER_SLOTS;
-    int ret;
-
-    if(set) {
-        if(pAdapter->filter_v6_index != -1) {
-            hddLog(VOS_TRACE_LEVEL_INFO, "IPV6 pass through already set, skipping");
-            return;
-        }
-        /* Add v6 pass through rule */
-        if(pAdapter->mc_addr_list.isFilterApplied)
-            wlan_hdd_set_mc_addr_list(pAdapter, FALSE);
-        /* Find a suitable slot and stick in filter */
-        while(--mcFilterIndex >=0 ) {
-            if(IS_FILTER_INDEX_FREE(pAdapter->user_filter_config, mcFilterIndex)) {
-                request.filterAction = HDD_RCV_FILTER_SET;
-                request.filterId = mcFilterIndex;
-                request.numParams = 1;
-                request.paramsData[0].protocolLayer = HDD_FILTER_PROTO_TYPE_MAC;
-                request.paramsData[0].dataOffset = WLAN_HDD_80211_FRM_DA_OFFSET;
-                request.paramsData[0].dataLength = 2;
-                request.paramsData[0].compareData[0]=0x33;
-                request.paramsData[0].compareData[1]=0x33;
-                ret = wlan_hdd_set_filter(pAdapter, &request);
-                if(ret == 0) {
-                    pAdapter->filter_v6_index = mcFilterIndex;
-                    SET_FILTER_BMAP(pAdapter->driver_filter_config, set, request.filterId);
-                    hddLog(VOS_TRACE_LEVEL_INFO, "Programmed IPV6 pass through at index %d",
-                            mcFilterIndex);
-                    break;
-                } else {
-                    hddLog(VOS_TRACE_LEVEL_ERROR,
-                            "Failed programming IPV6 pass through at index %d - TRY NEXT",
-                            mcFilterIndex);
-                }
-            }
-        }
-        if(mcFilterIndex<0)
-            hddLog(VOS_TRACE_LEVEL_ERROR, "IPV6 pass through rule prog failed!!");
-    } else if(pAdapter->filter_v6_index != -1) {
-        /* Remove pass through rule */
-        request.filterAction = HDD_RCV_FILTER_CLEAR;
-        request.filterId = pAdapter->filter_v6_index;
-        request.numParams = 1;
-        ret = wlan_hdd_set_filter(pAdapter, &request);
-        if(ret == 0) {
-            pAdapter->filter_v6_index = -1;
-            SET_FILTER_BMAP(pAdapter->driver_filter_config, set, request.filterId);
-            hddLog(VOS_TRACE_LEVEL_INFO, "Cleared IPV6 pass through at index %d",
-                    request.filterId);
-        } else {
-             hddLog(VOS_TRACE_LEVEL_ERROR, "IPV6 pass through rule CLEAR failed!!");
-        }
-    } else {
-        hddLog(VOS_TRACE_LEVEL_INFO, "Clear IPV6 passthrough when not set - ignore");
-    }
-}
-// IKJB42MAIN-1244, Motorola, a19091 -- END
-
 void wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
 {
     v_U8_t i;
+    tpSirRcvFltMcAddrList pMulticastAddrs = NULL;
     tHalHandle hHal = NULL;
-    v_U8_t filterAction;
-    tPacketFilterCfg request;
-    hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
-    // IKJB42MAIN-1244, Motorola, a19091 - BEGIN
-    int ret;
-    v_SCHAR_t mcFilterIndex = WLAN_HDD_MAX_FILTER_SLOTS;
-    // IKJB42MAIN-1244, Motorola, a19091 - END
+    hdd_context_t* pHddCtx = (hdd_context_t*)pAdapter->pHddCtx;
 
     if (NULL == pHddCtx)
     {
@@ -9492,197 +9456,78 @@ void wlan_hdd_set_mc_addr_list(hdd_adapter_t *pAdapter, v_U8_t set)
         return;
     }
 
-    filterAction = set ? HDD_RCV_FILTER_SET : HDD_RCV_FILTER_CLEAR;
-
-    // IKJB42MAIN-1244, Motorola, a19091 - BEGIN
-    hddLog(VOS_TRACE_LEVEL_INFO, "%s: Entered for %s",
-            __func__, set?"SET":"CLEAR");
-
-    if(pAdapter->filter_v6_index != -1) {
-        hddLog(VOS_TRACE_LEVEL_INFO, "%s: First calling CLEAR V6 ALLOW_ALL!",
-                __func__);
-        wlan_hdd_set_mc_v6(pAdapter, FALSE);
-    }
-    // IKJB42MAIN-1244, Motorola, a19091 - END
-
-    /*set mulitcast addr list*/
-    for (i = 0; i < pAdapter->mc_addr_list.mc_cnt; i++)
+    /* Check if INI is enabled or not, other wise just return
+     */
+    if (pHddCtx->cfg_ini->fEnableMCAddrList)
     {
-            memset(&request, 0, sizeof (tPacketFilterCfg));
-            request.filterAction = filterAction;
-            request.filterId = i;
-            if (set)
-            {
-            // IKJB42MAIN-1244, Motorola, a19091 - BEGIN
-            while(--mcFilterIndex >=0 ) {
-                if(IS_FILTER_INDEX_FREE(pAdapter->user_filter_config, mcFilterIndex)) {
-                    /* Non user filter index! */
-                    if(!IS_FILTER_INDEX_FREE(pAdapter->driver_filter_config, mcFilterIndex)) {
-                        hddLog(VOS_TRACE_LEVEL_INFO, "Clearing Filter index %d, before reprog",
-                            mcFilterIndex);
-                        request.filterAction = HDD_RCV_FILTER_CLEAR;
-                        request.filterId = mcFilterIndex;
-                        ret = wlan_hdd_set_filter(pAdapter, &request);
-                        if(ret == 0) {
-                            SET_FILTER_BMAP(pAdapter->driver_filter_config, FALSE, request.filterId);
-                        } else {
-                            hddLog(VOS_TRACE_LEVEL_ERROR,"failed to clear filter index %d",mcFilterIndex);
-                        }
-                    }
-                    if(!IS_FILTER_INDEX_FREE(pAdapter->driver_filter_config, mcFilterIndex)) {
-                        hddLog(VOS_TRACE_LEVEL_ERROR, "Failed to clear filter %d - try next",
-                            mcFilterIndex);
-                        continue;
-                    }
-                    request.filterAction = HDD_RCV_FILTER_SET;
-                    request.filterId = mcFilterIndex;
-                    request.numParams = 1;
-                    request.paramsData[0].protocolLayer = HDD_FILTER_PROTO_TYPE_MAC;
-                    request.paramsData[0].cmpFlag = HDD_FILTER_CMP_TYPE_EQUAL;
-                    request.paramsData[0].dataOffset = WLAN_HDD_80211_FRM_DA_OFFSET;
-                    request.paramsData[0].dataLength = ETH_ALEN;
-                    memcpy(&(request.paramsData[0].compareData[0]),
-                        &(pAdapter->mc_addr_list.addr[i][0]), ETH_ALEN);
-                    /*set mulitcast filters*/
-                    hddLog(VOS_TRACE_LEVEL_INFO,
-                        "%s: %s multicast filter: addr ="
-                        "%02x:%02x:%02x:%02x:%02x:%02x",
-                        __func__, set ? "setting" : "clearing",
-                        request.paramsData[0].compareData[0],
-                        request.paramsData[0].compareData[1],
-                        request.paramsData[0].compareData[2],
-                        request.paramsData[0].compareData[3],
-                        request.paramsData[0].compareData[4],
-                        request.paramsData[0].compareData[5]);
-                    pAdapter->mc_addr_list.filter_index[i] = request.filterId;
-                    break;
-                } else {
-                    /*user filter index - try next*/
-                    hddLog(VOS_TRACE_LEVEL_ERROR,
-                        "Index %d used by user filter - try next", mcFilterIndex);
-                }
-            }
-            if(mcFilterIndex < 0 ) {
-                /*No Free index in driver config available*/
-                hddLog(VOS_TRACE_LEVEL_FATAL,
-                        "No available slots to allow mcast filter - Too many user filters");
-                return;
-            }
-        } else { /* !set */
-            if(pAdapter->mc_addr_list.isFilterApplied == FALSE) {
-                hddLog(VOS_TRACE_LEVEL_INFO, "No previous filter ... skipping");
-                continue;
-            }
-            hddLog(VOS_TRACE_LEVEL_INFO, "Gonna clear index %d",
-                    pAdapter->mc_addr_list.filter_index[i]);
-            request.filterId = pAdapter->mc_addr_list.filter_index[i];
-            request.numParams = 1;
+        pMulticastAddrs = vos_mem_malloc(sizeof(tSirRcvFltMcAddrList));
+        if (NULL == pMulticastAddrs)
+        {
+            hddLog(VOS_TRACE_LEVEL_ERROR, FL("Could not allocate Memory"));
+            return;
         }
-        ret = wlan_hdd_set_filter(pAdapter, &request);
-        if(ret == 0) {
-            SET_FILTER_BMAP(pAdapter->driver_filter_config, set, request.filterId);
-        }
-    }
 
-    if(set) {
-        // Clear out any extraneous driver filters
-        request.filterAction = HDD_RCV_FILTER_CLEAR;
-        while(--mcFilterIndex>=0) {
-            request.filterId = mcFilterIndex;
-            if(!IS_FILTER_INDEX_FREE(pAdapter->driver_filter_config, mcFilterIndex) &&
-                    IS_FILTER_INDEX_FREE(pAdapter->user_filter_config, mcFilterIndex)) {
-                hddLog(VOS_TRACE_LEVEL_INFO, "Clearing Filter index %d,", mcFilterIndex);
-                ret = wlan_hdd_set_filter(pAdapter, &request);
-                if(ret == 0) {
-                    SET_FILTER_BMAP(pAdapter->driver_filter_config, FALSE, request.filterId);
-                } else {
-                    hddLog(VOS_TRACE_LEVEL_ERROR,"failed to clear filter index %d",mcFilterIndex);
+        if (set)
+        {
+            /* Following pre-conditions should be satisfied before wei
+             * configure the MC address list.
+             */
+            if (((pAdapter->device_mode == WLAN_HDD_INFRA_STATION) ||
+               (pAdapter->device_mode == WLAN_HDD_P2P_CLIENT))
+               && pAdapter->mc_addr_list.mc_cnt
+               && (eConnectionState_Associated ==
+               (WLAN_HDD_GET_STATION_CTX_PTR(pAdapter))->conn_info.connState))
+            {
+                pMulticastAddrs->ulMulticastAddrCnt =
+                                 pAdapter->mc_addr_list.mc_cnt;
+                for (i = 0; i < pAdapter->mc_addr_list.mc_cnt; i++)
+                {
+                    memcpy(pMulticastAddrs->multicastAddr[i],
+                            pAdapter->mc_addr_list.addr[i],
+                            sizeof(pAdapter->mc_addr_list.addr[i]));
+                    hddLog(VOS_TRACE_LEVEL_INFO,
+                            "%s: %s multicast filter: addr ="
+                            MAC_ADDRESS_STR,
+                            __func__, set ? "setting" : "clearing",
+                            MAC_ADDR_ARRAY(pMulticastAddrs->multicastAddr[i]));
                 }
+                /* Set multicast filter */
+                sme_8023MulticastList(hHal, pAdapter->sessionId,
+                                      pMulticastAddrs);
             }
         }
-        // IKJB42MAIN-1244, Motorola, a19091 - END
+        else
+        {
+            /* Need to clear only if it was previously configured
+             */
+            if (pAdapter->mc_addr_list.isFilterApplied)
+            {
+                pMulticastAddrs->ulMulticastAddrCnt = 0;
+                sme_8023MulticastList(hHal, pAdapter->sessionId,
+                                      pMulticastAddrs);
+            }
+
+        }
+        pAdapter->mc_addr_list.isFilterApplied = set ? TRUE : FALSE;
+        vos_mem_free(pMulticastAddrs);
+    }
+    else
+    {
+        hddLog(VOS_TRACE_LEVEL_INFO,
+                FL("gMCAddrListEnable is not enabled in INI"));
     }
     return;
 }
-
-// IKJB42MAIN-1244, Motorola, a19091 - BEGIN
-int wlan_hdd_update_v6_filters(hdd_adapter_t *pAdapter, v_U8_t set){
-    tSirInvokeV6Filter filterConfig;
-    hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
-
-    if(!hdd_connIsConnected(pHddStaCtx))
-    {
-        hddLog(VOS_TRACE_LEVEL_WARN,
-                "Not associated - ignoring wlan_hdd_update_v6_filters");
-        return 0;
-    }
-    filterConfig.configureFilterFn = wlan_hdd_set_v6_filter;
-    filterConfig.pHddAdapter = pAdapter;
-    filterConfig.set = set;
-
-    if (eHAL_STATUS_SUCCESS != sme_ReceiveSetMcFilter(&filterConfig))
-    {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "%s: Failure to execute Set Filter\n",
-            __func__);
-        return -1;
-    }
-    return 0;
-}
-
-int wlan_hdd_set_v6_filter(void *pAdapter, v_U8_t set, v_U8_t userSet) {
-    hdd_adapter_t* pTAdapter = (hdd_adapter_t*)pAdapter;
-    hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pTAdapter);
-    int ret = 0;
-
-    if(userSet)
-        pTAdapter->ipv6_user_set_map = (set)?IPV6_CONFIG_ALLOW_ALL:IPV6_CONFIG_MANDATORY;
-    else
-        pTAdapter->ipv6_code_set_map = (set)?IPV6_CONFIG_ALLOW_ALL:IPV6_CONFIG_MANDATORY;
-
-    hddLog(VOS_TRACE_LEVEL_INFO, "wlan_hdd_set_v6_filter - %s - set map is now - code = %s, user = %s",
-        userSet?"USER-SET":"CODE-SET",
-        (pTAdapter->ipv6_code_set_map == IPV6_CONFIG_MANDATORY) ? "MANDATORY":"ALLOW_ALL",
-        (pTAdapter->ipv6_user_set_map == IPV6_CONFIG_MANDATORY) ? "MANDATORY":"ALLOW_ALL");
-
-    if(!hdd_connIsConnected(pHddStaCtx))
-    {
-        hddLog(VOS_TRACE_LEVEL_WARN,
-                 "Not associated - ignoring wlan_hdd_set_v6_filter");
-        return ret;
-    }
-    if(pTAdapter->needs_v6_set == eANI_BOOLEAN_TRUE) {
-        hddLog(VOS_TRACE_LEVEL_WARN, "Delay v6 set .. skip!");
-        return ret;
-    }
-    if(pTAdapter->ipv6_code_set_map == pTAdapter->ipv6_user_set_map  &&
-            pTAdapter->ipv6_code_set_map == IPV6_CONFIG_MANDATORY ) {
-        hddLog(VOS_TRACE_LEVEL_INFO, "Set IPV6 filter to MANDATORY");
-        wlan_hdd_set_mc_v6(pAdapter, FALSE);
-        wlan_hdd_set_mc_addr_list(pTAdapter, TRUE);
-    } else {
-        hddLog(VOS_TRACE_LEVEL_INFO, "Set IPV6 filter to ALLOW_ALL");
-        if(pTAdapter->filter_v6_index == -1) {
-            hddLog(VOS_TRACE_LEVEL_INFO, "Program V6!");
-            wlan_hdd_set_mc_addr_list(pTAdapter, FALSE);
-            wlan_hdd_set_mc_v6(pTAdapter, TRUE);
-        } else {
-            hddLog(VOS_TRACE_LEVEL_INFO, "Skip program V6 - already set!");
-        }
-    }
-    return ret;
-}
-// IKJB42MAIN-1244, Motorola, a19091 - END
 
 static int __iw_set_packet_filter_params(struct net_device *dev,
                                          struct iw_request_info *info,
                                          union iwreq_data *wrqu, char *extra)
 {
-    hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
-    // IKJB42MAIN-1244, Motorola, a19091 - BEGIN
-    int retVal;
-    v_U8_t mcFilterReset = FALSE;
-    tpPacketFilterCfg pRequest;
-    // IKJB42MAIN-1244, Motorola, a19091 - END
+    hdd_adapter_t *pAdapter;
+    hdd_context_t *pHddCtx;
+    tpPacketFilterCfg pRequest = NULL;
+    int ret = 0;
+    struct iw_point s_priv_data;
 
     ENTER();
 
@@ -9693,60 +9538,44 @@ static int __iw_set_packet_filter_params(struct net_device *dev,
         return -EPERM;
     }
 
-    //IKHSS7-35965, a19091, Motorola changes -- BEGIN
-    pRequest = (tpPacketFilterCfg)kmalloc(sizeof(tPacketFilterCfg), GFP_KERNEL);
+    pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
+    if (NULL == pAdapter)
+    {
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                  "%s: Adapter is NULL",__func__);
+        return -EINVAL;
+    }
+    pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
+    ret = wlan_hdd_validate_context(pHddCtx);
+    if (0 != ret)
+    {
+        return ret;
+    }
+    if (hdd_priv_get_data(&s_priv_data, wrqu))
+    {
+       return -EINVAL;
+    }
 
-    if(pRequest == NULL) {
-        hddLog(VOS_TRACE_LEVEL_FATAL, "%s: Out of memory - cant alloc %zd bytes",
-                __FUNCTION__,sizeof(tpPacketFilterCfg));
+    if ((NULL == s_priv_data.pointer) || (0 == s_priv_data.length))
+    {
+       return -EINVAL;
+    }
+
+    /* ODD number is used for set, copy data using copy_from_user */
+    pRequest = mem_alloc_copy_from_user_helper(s_priv_data.pointer,
+                                               s_priv_data.length);
+    if (NULL == pRequest)
+    {
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
+                  "mem_alloc_copy_from_user_helper fail");
         return -ENOMEM;
     }
 
-    if(copy_from_user(pRequest, wrqu->data.pointer, sizeof(tPacketFilterCfg))) {
-        hddLog(VOS_TRACE_LEVEL_FATAL, "%s -- copy_from_user -- data pointer failed! bailing",
-                __FUNCTION__);
-        kfree(pRequest);
-        return -EFAULT;
-    }
-    //IKHSS7-35965, a19091, Motorola changes -- END
-
-    // IKJB42MAIN-1244, Motorola, a19091 - BEGIN
-    if(!IS_FILTER_INDEX_FREE(pAdapter->driver_filter_config, pRequest->filterId) &&
-            IS_FILTER_INDEX_FREE(pAdapter->user_filter_config, pRequest->filterId)) {
-        // Need to re-adjust MC filter - disable and re-enable
-        hddLog(VOS_TRACE_LEVEL_INFO, "%s, Filter ID %d already in use - disable and re-enable mc filters!!",
-                __FUNCTION__, pRequest->filterId);
-        wlan_hdd_set_mc_addr_list(pAdapter, FALSE);
-        mcFilterReset = TRUE;
-    }
-    // IKJB42MAIN-1244, Motorola, a19091 - END
-
-    retVal = wlan_hdd_set_filter(pAdapter, pRequest);
-
-    // IKJB42MAIN-1244, Motorola, a19091 - BEGIN
-    if(retVal == 0) {
-        SET_FILTER_BMAP(pAdapter->driver_filter_config, (pRequest->filterAction), pRequest->filterId);
-        SET_FILTER_BMAP(pAdapter->user_filter_config, (pRequest->filterAction), pRequest->filterId);
-    }
-
-    if(mcFilterReset) {
-        hddLog(VOS_TRACE_LEVEL_INFO, "%s, Re -enabling MC filters",
-                __FUNCTION__);
-        wlan_hdd_set_mc_addr_list(pAdapter, TRUE);
-    }
-
-    if(pAdapter->needs_v6_set == eANI_BOOLEAN_TRUE) {
-        hddLog(VOS_TRACE_LEVEL_INFO, "%s, Enabling MC filters after assoc", __FUNCTION__);
-        wlan_hdd_update_v6_filters(pAdapter, (pAdapter->mc_addr_list.mc_cnt==0)?1:0);
-        pAdapter->needs_v6_set = eANI_BOOLEAN_FALSE;
-    }
-
-    if(pRequest!= NULL)
-        kfree(pRequest);
+    ret = wlan_hdd_set_filter(pAdapter, pRequest);
+    kfree(pRequest);
 
     EXIT();
-    return retVal;
-    // IKJB42MAIN-1244, Motorola, a19091 - END
+    return ret;
 }
 
 static int iw_set_packet_filter_params(struct net_device *dev,
@@ -11385,13 +11214,6 @@ static const struct iw_priv_args we_private_args[] = {
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
         0,
         "setChannelRange" },
-
-    // IKJB42MAIN-1244, Motorola, a19091 - BEGIN
-    {   WE_SET_IPV6_FILTER_STATE,
-        IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
-        0,
-        "setIPV6FilState" },
-    // IKJB42MAIN-1244, Motorola, a19091 - END
 
     {   WE_ENABLE_STRICT_FCC_REG,
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,

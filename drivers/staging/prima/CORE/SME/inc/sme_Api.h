@@ -2612,7 +2612,6 @@ eHalStatus sme_ReceiveFilterSetFilter(tHalHandle hHal, tpSirRcvPktFilterCfgType 
     \param  tSirInvokeV6Filter - Receive Packet Filter callback param
     \return eHalStatus
   ---------------------------------------------------------------------------*/
-eHalStatus sme_ReceiveSetMcFilter(tSirInvokeV6Filter *filterConfig);
 // IKJB42MAIN-1244, Motorola, a19091 -- END
 
 /* ---------------------------------------------------------------------------
