@@ -181,3 +181,9 @@ obj-$(CONFIG_ESOC)              += esoc/
 obj-$(CONFIG_FPGA)		+= fpga/
 obj-$(CONFIG_SENSORS_SSC)		+= sensors/
 obj-$(CONFIG_TEE)		+= tee/
+
+obj-y += mmi_annotate/
+obj-y += mmi_info/
+obj-y += tzlog_dump/
+obj-y += utag/
+obj-y += watchdogtest/
