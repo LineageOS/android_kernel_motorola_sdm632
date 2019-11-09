@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Motorola Mobility LLC.
+ * Copyright (C) 2018 Motorola Mobility LLC.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -26,7 +26,7 @@ struct msm_cci_intf_register {
 };
 
 struct msm_cci_intf_data {
-	unsigned short count; /* between 1 and MSM_CCI_INTF_MAX_XFER */
+	unsigned short count; /* between 1 and CCI_INTF_MAX_XFER */
 	unsigned char  buf[MSM_CCI_INTF_MAX_XFER];
 };
 
