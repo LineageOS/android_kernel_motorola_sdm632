@@ -131,19 +131,19 @@ CDEFINES +=	-DANI_LITTLE_BYTE_ENDIAN \
 		-Werror\
 		-D__linux__
 
-ifneq (,$(filter ocean% surf%, $(TARGET_PRODUCT)))
+ifeq ($(CONFIG_OCEAN_DTB), y)
 CDEFINES += -DCONFIG_SND_SOC_NXP_TFA9874
 endif
 
-ifneq (,$(filter channel%, $(TARGET_PRODUCT)))
+ifeq ($(CONFIG_CHANNEL_DTB), y)
 CDEFINES += -DCONFIG_SND_SOC_TAS2560
 endif
 
-ifneq (,$(filter ginna%, $(TARGET_PRODUCT)))
+ifeq ($(CONFIG_GINNA_DTB), y)
 CDEFINES += -DCONFIG_SND_SOC_AWINIC_AW882XX
 endif
 
-ifneq (,$(filter river%, $(TARGET_PRODUCT)))
+ifeq ($(CONFIG_RIVER_DTB), y)
 CDEFINES += -DCONFIG_CIRRUS_PLAYBACK
 endif
 
