@@ -24,27 +24,27 @@ EXTRA_CFLAGS += -Werror
 
 ifeq ($(CONFIG_RIVER_DTB), y)
 cirrus_madera-objs = madera.o madera-slimbus.o
-obj-m += cirrus_madera.o
+obj-y += cirrus_madera.o
 
 cirrus_wm_adsp-objs = wm_adsp.o
-obj-m += cirrus_wm_adsp.o
+obj-y += cirrus_wm_adsp.o
 
 cirrus_cs35l35-objs = cs35l35.o
-obj-m += cirrus_cs35l35.o
+obj-y += cirrus_cs35l35.o
 
 cirrus_cs35l36-objs = cs35l36.o cs35l36-tables.o
-obj-m += cirrus_cs35l36.o
+obj-y += cirrus_cs35l36.o
 
 cirrus_cs47l35-objs =  cs47l35.o
-obj-m += cirrus_cs47l35.o
+obj-y += cirrus_cs47l35.o
 
 cirrus_cs47l90-objs =  cs47l90.o
-obj-m += cirrus_cs47l90.o
+obj-y += cirrus_cs47l90.o
 
-obj-m += aov_trigger.o
+obj-y += aov_trigger.o
 
 cirrus_cs35l41-objs = cs35l41.o cs35l41-tables.o
-obj-m += cirrus_cs35l41.o
+obj-y += cirrus_cs35l41.o
 
 ifneq ($(filter m y,$(CONFIG_SND_SOC_CS35L41_SPI)),)
    cirrus_cs35l41-objs += cs35l41-spi.o
@@ -53,7 +53,7 @@ else
 endif
 
 cirrus_playback-objs = msm-cirrus-playback.o
-obj-m += cirrus_playback.o
+obj-y += cirrus_playback.o
 endif
 
 ifeq ($(CONFIG_OCEAN_DTB), y)
@@ -65,16 +65,16 @@ ifdef TFA_DEBUG
 EXTRA_CFLAGS += -DTFA_DEBUG -DDEBUG
 snd_soc_tfa9874-objs += tfa_debug.o
 endif
-obj-m += snd_soc_tfa9874.o
+obj-y += snd_soc_tfa9874.o
 endif
 
 ifeq ($(CONFIG_CHANNEL_DTB), y)
 tas2560-objs = tas2560-core.o tas2560-misc.o tas2560-codec.o tas2560-regmap.o
-obj-m += tas2560.o
+obj-y += tas2560.o
 
 tas2560_algo-objs = tas2560-algo.o
-obj-m += tas2560_algo.o
+obj-y += tas2560_algo.o
 
 tas2560_calib-objs = tas2560-calib.o
-obj-m += tas2560_calib.o
+obj-y += tas2560_calib.o
 endif
