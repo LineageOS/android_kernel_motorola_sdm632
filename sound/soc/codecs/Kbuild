@@ -21,6 +21,8 @@ EXTRA_CFLAGS += -DTFA98XX_GIT_VERSIONS=\"$(GIT_VERSION)\"
 EXTRA_CFLAGS += -DTFA9874_NONDSP_STEREO
 EXTRA_CFLAGS += -Isound/soc/codecs/inc
 EXTRA_CFLAGS += -Werror
+
+ifeq ($(CONFIG_RIVER_DTB), y)
 cirrus_madera-objs = madera.o madera-slimbus.o
 obj-m += cirrus_madera.o
 
@@ -52,7 +54,9 @@ endif
 
 cirrus_playback-objs = msm-cirrus-playback.o
 obj-m += cirrus_playback.o
+endif
 
+ifeq ($(CONFIG_OCEAN_DTB), y)
 snd_soc_tfa9874-objs += tfa98xx.o
 snd_soc_tfa9874-objs += tfa_container.o
 snd_soc_tfa9874-objs += tfa_dsp.o
@@ -62,7 +66,9 @@ EXTRA_CFLAGS += -DTFA_DEBUG -DDEBUG
 snd_soc_tfa9874-objs += tfa_debug.o
 endif
 obj-m += snd_soc_tfa9874.o
+endif
 
+ifeq ($(CONFIG_CHANNEL_DTB), y)
 tas2560-objs = tas2560-core.o tas2560-misc.o tas2560-codec.o tas2560-regmap.o
 obj-m += tas2560.o
 
@@ -71,3 +77,4 @@ obj-m += tas2560_algo.o
 
 tas2560_calib-objs = tas2560-calib.o
 obj-m += tas2560_calib.o
+endif
