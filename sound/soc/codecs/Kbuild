@@ -1,0 +1,83 @@
+# add -Wall to try to catch everything we can.
+EXTRA_CFLAGS += -Wall
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/include
+
+HAVE_AUDIO_KERNEL = $(shell test -d $(TOP)/vendor/qcom/opensource/audio-kernel && echo 1)
+
+ifeq ($(HAVE_AUDIO_KERNEL),1)
+$(info audio kernel path exist)
+EXTRA_CFLAGS += -I$(TOP)/vendor/qcom/opensource/audio-kernel/include
+EXTRA_CFLAGS += -I$(TOP)/vendor/qcom/opensource/audio-kernel/include/uapi
+else
+$(info audio kernel path not exist, include techpack audio header)
+EXTRA_CFLAGS += -I$(TOP)/kernel/techpack/audio/include
+EXTRA_CFLAGS += -I$(TOP)/kernel/techpack/audio/include/uapi
+endif
+
+EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER
+
+ifneq (,$(filter channel%, $(TARGET_PRODUCT)))
+EXTRA_CFLAGS += -DCONFIG_TAS2560_REGMAP -DCONFIG_TAS2560_CODEC -DCONFIG_TAS2560_MISC -DCONFIG_SND_SOC_TAS2560
+endif
+
+ifeq ($(KDIR),)
+PLMA_HOSTSW_DIR=$(realpath -f $(srctree)/$(src))
+else
+PLMA_HOSTSW_DIR=$(realpath -f $(src))
+endif
+GIT_VERSION=$(shell cd $(PLMA_HOSTSW_DIR); git describe --tags --dirty --match "v[0-9]*.[0-9]*.[0-9]*")
+EXTRA_CFLAGS += -DTFA98XX_GIT_VERSIONS=\"$(GIT_VERSION)\"
+# debugging support (also enables trace_printk)
+EXTRA_CFLAGS += -DTFA9874_NONDSP_STEREO
+EXTRA_CFLAGS += -I$(TOP)/motorola/kernel/modules/sound/soc/codecs/inc
+EXTRA_CFLAGS += -Werror
+cirrus_madera-objs = madera.o madera-slimbus.o
+obj-m += cirrus_madera.o
+
+cirrus_wm_adsp-objs = wm_adsp.o
+obj-m += cirrus_wm_adsp.o
+
+cirrus_cs35l35-objs = cs35l35.o
+obj-m += cirrus_cs35l35.o
+
+cirrus_cs35l36-objs = cs35l36.o cs35l36-tables.o
+obj-m += cirrus_cs35l36.o
+
+cirrus_cs47l35-objs =  cs47l35.o
+obj-m += cirrus_cs47l35.o
+
+cirrus_cs47l90-objs =  cs47l90.o
+obj-m += cirrus_cs47l90.o
+
+obj-m += aov_trigger.o
+
+cirrus_cs35l41-objs = cs35l41.o cs35l41-tables.o
+obj-m += cirrus_cs35l41.o
+
+ifneq ($(filter m y,$(CONFIG_SND_SOC_CS35L41_SPI)),)
+   cirrus_cs35l41-objs += cs35l41-spi.o
+else
+   cirrus_cs35l41-objs += cs35l41-i2c.o
+endif
+
+cirrus_playback-objs = msm-cirrus-playback.o
+obj-m += cirrus_playback.o
+
+snd_soc_tfa9874-objs += tfa98xx.o
+snd_soc_tfa9874-objs += tfa_container.o
+snd_soc_tfa9874-objs += tfa_dsp.o
+snd_soc_tfa9874-objs += tfa_init.o
+ifdef TFA_DEBUG
+EXTRA_CFLAGS += -DTFA_DEBUG -DDEBUG
+snd_soc_tfa9874-objs += tfa_debug.o
+endif
+obj-m += snd_soc_tfa9874.o
+
+tas2560-objs = tas2560-core.o tas2560-misc.o tas2560-codec.o tas2560-regmap.o
+obj-m += tas2560.o
+
+tas2560_algo-objs = tas2560-algo.o
+obj-m += tas2560_algo.o
+
+tas2560_calib-objs = tas2560-calib.o
+obj-m += tas2560_calib.o
