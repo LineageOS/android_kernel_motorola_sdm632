@@ -474,6 +474,15 @@ config THERMAL_TSENS
 	  thermal userspace client when a threshold is reached. Warm/Cool
 	  temperature thresholds can be set independently for each sensor.
 
+config MMI_SYS_TEMP
+	tristate "Motorola Surface Temperature Driver"
+	depends on THERMAL
+	default n
+	help
+	  This creates a sysfs property for front and back surface
+	  temperatures. These are meant to be populated by the a
+	  user space thermal management daemon.
+
 menu "Qualcomm thermal drivers"
 depends on (ARCH_QCOM && OF) || COMPILE_TEST
 source "drivers/thermal/qcom/Kconfig"
