@@ -62,6 +62,9 @@ obj-$(CONFIG_PANEL)             += panel.o
 obj-$(CONFIG_QPNP_MISC) 	+= qpnp-misc.o
 obj-$(CONFIG_FPR_FPC) 	+= fpr_FingerprintCard/
 obj-$(CONFIG_MEMORY_STATE_TIME)	+= memory_state_time.o
+obj-$(CONFIG_SARSENSOR_SX9331) += sx933x_sar.o
+obj-$(CONFIG_SARSENSOR_SX9325) += sx932x_sar.o
+obj-$(CONFIG_SARSENSOR_SX9310) += sx931x_triple.o
 
 obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_MEMORY_STATE_TIME)	+= memory_state_time.o
