@@ -139,6 +139,17 @@ config INTEL_MID_PTI
 	  an Intel Atom (non-netbook) mobile device containing a MIPI
 	  P1149.7 standard implementation.
 
+config INPUT_DRV2624_HAPTICS
+	tristate "TI DRV2624 haptics support"
+	depends on INPUT && I2C
+	select INPUT_FF_MEMLESS
+	select REGMAP_I2C
+	help
+	  Say Y to enable support for the TI DRV2624 haptics driver.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called drv2624_mmi.
+
 config SGI_IOC4
 	tristate "SGI IOC4 Base IO support"
 	depends on PCI

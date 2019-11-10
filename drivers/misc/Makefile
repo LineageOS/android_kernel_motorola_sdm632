@@ -4,6 +4,7 @@
 
 obj-$(CONFIG_IBM_ASM)		+= ibmasm/
 obj-$(CONFIG_INPUT_AWINIC_HAPTIC)	+= awinic/
+obj-$(CONFIG_INPUT_DRV2624_HAPTICS)	+= drv2624_mmi.o
 obj-$(CONFIG_AD525X_DPOT)	+= ad525x_dpot.o
 obj-$(CONFIG_AD525X_DPOT_I2C)	+= ad525x_dpot-i2c.o
 obj-$(CONFIG_AD525X_DPOT_SPI)	+= ad525x_dpot-spi.o
