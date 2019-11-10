@@ -834,6 +834,27 @@ config DROPBOX
 	  in dropbox manager service.  This enables fast and simple logging of
 	  various critical events from kernel drivers.
 
+config SARSENSOR_SX9331
+	tristate "SARSENSOR SX9331"
+	default n
+	help
+	  Say Y here if you have a sar sensor SX9331 connected
+	  to your system.If unsure, say N.
+
+config SARSENSOR_SX9325
+	tristate "SARSENSOR SX9325"
+	default n
+	help
+	  Say Y here if you have a sar sensor SX9325 connected
+	  to your system.If unsure, say N.
+
+config SARSENSOR_SX9310
+	tristate "SARSENSOR SX9310"
+	default n
+	help
+	  Say Y here if you have a sar sensor SX9310 connected
+	  to your system.If unsure, say N.
+
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/awinic/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
