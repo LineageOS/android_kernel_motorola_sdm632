@@ -1276,6 +1276,9 @@ CONFIG_DROPBOX=y
 # CONFIG_EEPROM_MAX6875 is not set
 # CONFIG_EEPROM_93CX6 is not set
 # CONFIG_EEPROM_93XX46 is not set
+CONFIG_INPUT_AWINIC_HAPTIC=y
+# CONFIG_AW8624_HAPTIC is not set
+CONFIG_AW869X_HAPTIC=y
 
 #
 # Texas Instruments shared transport line discipline
