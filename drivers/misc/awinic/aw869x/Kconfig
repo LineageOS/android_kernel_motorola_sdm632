@@ -1,0 +1,15 @@
+#
+# AW869X Driver
+#
+
+config AW869X_HAPTIC
+	tristate "Awinic AW869X haptic driver"
+	depends on I2C && INPUT_AWINIC_HAPTIC
+	help
+	  Say Y here if you have Awinic AW869X haptic controller
+	  chip in your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called aw869x.
