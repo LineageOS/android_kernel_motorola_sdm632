@@ -1340,4 +1340,16 @@ config TOUCHSCREEN_NOVATEK_CHIPSET
 source "drivers/input/touchscreen/nova_mmi/Kconfig"
 source "drivers/input/touchscreen/nova_36525_mmi/Kconfig"
 
+config TOUCHSCREEN_ILITEK_CHIPSET
+        bool "Ilitek touchpanel Ilitek series"
+        depends on I2C
+        help
+          Say Y here if you have a Ilitek ili9881 touchscreen.
+          Ilitek controllers are multi touch controllers which can
+          report 10 touches at a time.
+
+          If unsure, say N.
+
+source "drivers/input/touchscreen/ilitek_mmi/Kconfig"
+
 endif
