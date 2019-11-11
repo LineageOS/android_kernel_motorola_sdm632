@@ -29,16 +29,14 @@
 #include <linux/regulator/consumer.h>
 #include <linux/firmware.h>
 #include <linux/debugfs.h>
-#include <linux/input/focaltech_mmi.h>
+#include <linux/input/focaltech_mmi_modules.h>
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 #include <linux/proc_fs.h>
-#if defined(CONFIG_TOUCHSCREEN_FOCALTECH_UPGRADE_MMI)
 #include "focaltech_flash.h"
-#endif
 
 
 #if defined(CONFIG_FB)
@@ -878,6 +876,13 @@ static void ft_update_fw_id(struct ft_ts_data *data)
 		data->fw_id[0], data->fw_id[1]);
 }
 
+static void ft_clear_fw_id(struct ft_ts_data *data)
+{
+	data->fw_id[0] = 0;
+	data->fw_id[1] = 0;
+	data->fw_ver[0] = 0;
+}
+
 static void ft_ud_fix_mismatch(struct ft_ts_data *data)
 {
 	int i;
@@ -1090,14 +1095,16 @@ power_off:
 		return rc;
 	}
 
-	rc = regulator_disable(data->vcc_i2c);
-	if (rc) {
-		dev_err(&data->client->dev,
-			"Regulator vcc_i2c disable failed rc=%d\n", rc);
-		rc = regulator_enable(data->vdd);
+	if (!IS_ERR(data->vcc_i2c)) {
+		rc = regulator_disable(data->vcc_i2c);
 		if (rc) {
 			dev_err(&data->client->dev,
-				"Regulator vdd enable failed rc=%d\n", rc);
+				"Regulator vcc_i2c disable failed rc=%d\n", rc);
+			rc = regulator_enable(data->vdd);
+			if (rc) {
+				dev_err(&data->client->dev,
+					"Regulator vdd enable failed rc=%d\n", rc);
+			}
 		}
 	}
 
@@ -1151,23 +1158,31 @@ static int ft_power_init(struct ft_ts_data *data, bool on)
 
 reg_vcc_i2c_put:
 	regulator_put(data->vcc_i2c);
+	data->vcc_i2c = NULL;
 reg_vdd_set_vtg:
 	if (regulator_count_voltages(data->vdd) > 0)
 		regulator_set_voltage(data->vdd, 0, FT_VTG_MAX_UV);
 reg_vdd_put:
 	regulator_put(data->vdd);
+	data->vdd = NULL;
+
 	return rc;
 
 pwr_deinit:
-	if (regulator_count_voltages(data->vdd) > 0)
-		regulator_set_voltage(data->vdd, 0, FT_VTG_MAX_UV);
+	if (!IS_ERR_OR_NULL(data->vdd)) {
+		if (regulator_count_voltages(data->vdd) > 0)
+			regulator_set_voltage(data->vdd, 0, FT_VTG_MAX_UV);
 
-	regulator_put(data->vdd);
+		regulator_put(data->vdd);
+	}
 
-	if (regulator_count_voltages(data->vcc_i2c) > 0)
-		regulator_set_voltage(data->vcc_i2c, 0, FT_I2C_VTG_MAX_UV);
+	if (!IS_ERR_OR_NULL(data->vcc_i2c)) {
+		if (regulator_count_voltages(data->vcc_i2c) > 0)
+			regulator_set_voltage(data->vcc_i2c, 0, FT_I2C_VTG_MAX_UV);
 
-	regulator_put(data->vcc_i2c);
+		regulator_put(data->vcc_i2c);
+	}
+
 	return 0;
 }
 
@@ -1323,7 +1338,7 @@ static int ft_ts_stop(struct device *dev)
 	input_mt_report_pointer_emulation(data->input_dev, false);
 	input_sync(data->input_dev);
 
-	if (gpio_is_valid(data->pdata->reset_gpio)) {
+	if (gpio_is_valid(data->pdata->reset_gpio) || (data->pdata->force_send_sleep == true)) {
 		txbuf[0] = FT_REG_PMODE;
 		txbuf[1] = FT_PMODE_HIBERNATE;
 		ft_i2c_write(data->client, txbuf, sizeof(txbuf));
@@ -1832,7 +1847,6 @@ static int ft_fps_register_init(struct ft_ts_data *data)
 	return 0;
 }
 
-#if !defined(CONFIG_TOUCHSCREEN_FOCALTECH_UPGRADE_MMI)
 static int ft_auto_cal(struct i2c_client *client)
 {
 	struct ft_ts_data *data = i2c_get_clientdata(client);
@@ -2170,7 +2184,6 @@ rel_fw:
 	release_firmware(fw);
 	return rc;
 }
-#endif
 
 static ssize_t ft_poweron_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
@@ -2291,13 +2304,14 @@ static ssize_t ft_do_reflash_store(struct device *dev,
 	mutex_lock(&data->input_dev->mutex);
 	ft_irq_disable(data);
 	data->loading_fw = true;
-#if defined(CONFIG_TOUCHSCREEN_FOCALTECH_UPGRADE_MMI)
+	if(data->pdata->fw_update_mmi) {
 		retval = fts_ctpm_auto_upgrade(data->client,
 				data->fw_name,
 				data->pdata);
-#else
+	} else {
 		retval = ft_fw_upgrade(dev, true);
-#endif
+	}
+
 	if (retval)
 		dev_err(&data->client->dev,
 				"%s: FW %s upgrade failed\n",
@@ -2308,6 +2322,10 @@ static ssize_t ft_do_reflash_store(struct device *dev,
 	mutex_unlock(&data->input_dev->mutex);
 
 	retval = count;
+
+	ft_update_fw_ver(data);
+	ft_update_fw_vendor_id(data);
+	ft_update_fw_id(data);
 exit:
 	data->fw_name[0] = 0;
 	return retval;
@@ -2837,7 +2855,7 @@ static int ft_create_proc_entry(struct ft_ts_data *data)
 
 static void ft_remove_proc_entry(struct ft_ts_data *data)
 {
-	proc_remove(data->proc_entry);
+	remove_proc_entry(FT_PROC_DIR_NAME, NULL);
 }
 
 #ifdef CONFIG_OF
@@ -3189,6 +3207,16 @@ static int ft_parse_dt(struct device *dev,
 	pdata->resume_in_workqueue = of_property_read_bool(np,
 					"focaltech,resume-in-workqueue");
 
+	if (of_property_read_bool(np, "focaltech,fw-update-mmi")) {
+		pr_notice("using mmi firmware update\n");
+		pdata->fw_update_mmi = true;
+	}
+
+	if (of_property_read_bool(np, "focaltech,force-send-sleep")) {
+		pr_notice("using mmi force send sleep cmd\n");
+		pdata->force_send_sleep = true;
+	}
+
 	if (of_property_read_bool(np, "focaltech,x-flip")) {
 		pr_notice("using flipped X axis\n");
 		pdata->x_flip = true;
@@ -3317,6 +3345,7 @@ static int ft_ts_probe(struct i2c_client *client,
 	struct dentry *temp;
 	u8 reg_value = 0;
 	u8 reg_addr;
+	u8 lic_ver = 0;
 	int err, retval, attr_count;
 
 	if (client->dev.of_node) {
@@ -3483,9 +3512,9 @@ static int ft_ts_probe(struct i2c_client *client,
 		goto input_register_device_err;
 	}
 
-#ifdef CONFIG_TOUCHSCREEN_FOCALTECH_UPGRADE_8006U_MMI
-	fts_extra_init(client, input_dev, pdata);
-#endif
+	if ((pdata->family_id == FT8006U_ID) || (pdata->family_id == FT5422U_ID)) {
+		fts_extra_init(client, input_dev, pdata);
+	}
 
 	err = request_threaded_irq(client->irq, NULL,
 				ft_ts_interrupt,
@@ -3610,6 +3639,20 @@ static int ft_ts_probe(struct i2c_client *client,
 	ft_update_fw_ver(data);
 	ft_update_fw_vendor_id(data);
 	ft_update_fw_id(data);
+
+	if (pdata->family_id == FT8006U_ID) {
+		fts_lic_get_ver_in_tp(client, &lic_ver);
+		/*
+		* If display initial code isn't written fully, then this value should be
+		* a negative value with signed(e.g. 0xFF), therefore need to clear the buildid
+		* info then this will cause script update the touch firmware again.
+		*/
+		dev_info(&client->dev, "Display init code ver:%d\n",
+			(s8)lic_ver);
+		if ((s8)lic_ver < 0) {
+			ft_clear_fw_id(data);
+		}
+	}
 
 #if defined(CONFIG_FB)
 	INIT_WORK(&data->fb_notify_work, fb_notify_resume_work);
@@ -3807,9 +3850,11 @@ static int ft_ts_remove(struct i2c_client *client)
 	data->irq_enabled = false;
 
 	ft_gpio_configure(data, false);
-#ifdef CONFIG_TOUCHSCREEN_FOCALTECH_UPGRADE_8006U_MMI
-	fts_extra_exit();
-#endif
+
+	if ((data->pdata->family_id == FT8006U_ID) || (data->pdata->family_id == FT5422U_ID)) {
+		fts_extra_exit();
+	}
+
 	if (data->ts_pinctrl) {
 		if (IS_ERR_OR_NULL(data->pinctrl_state_release)) {
 			devm_pinctrl_put(data->ts_pinctrl);
@@ -3835,6 +3880,7 @@ static int ft_ts_remove(struct i2c_client *client)
 		ft_power_init(data, false);
 
 	input_unregister_device(data->input_dev);
+	data->input_dev = NULL;
 	input_free_device(data->input_dev);
 	kobject_put(data->ts_info_kobj);
 	return 0;

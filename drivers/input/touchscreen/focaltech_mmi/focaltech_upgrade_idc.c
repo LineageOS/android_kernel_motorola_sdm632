@@ -16,7 +16,7 @@
  */
 #include <linux/types.h>
 #include <linux/delay.h>
-#include <linux/input/focaltech_mmi.h>
+#include <linux/input/focaltech_mmi_modules.h>
 #include "focaltech_flash.h"
 #include "focaltech_upgrade_common.h"
 
