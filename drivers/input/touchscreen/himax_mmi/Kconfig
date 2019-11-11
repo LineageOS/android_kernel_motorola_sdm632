@@ -1,0 +1,9 @@
+#
+# Himax Touchscreen driver configuration
+#
+
+config TOUCHSCREEN_HIMAX_MMI
+        tristate "HIMAX chipset mmi touchscreen"
+		depends on TOUCHSCREEN_HIMAX_CHIPSET
+		help
+		This enables support for HIMAX MMI CHIPSET over I2C based touchscreens.
