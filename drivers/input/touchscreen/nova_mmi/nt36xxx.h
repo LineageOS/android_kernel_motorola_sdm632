@@ -1,8 +1,8 @@
 /*
  * Copyright (C) 2010 - 2017 Novatek, Inc.
  *
- * $Revision: 22429 $
- * $Date: 2018-01-30 19:42:59 +0800 (Tue, 30 Jan 2018) $
+ * $Revision: 17989 $
+ * $Date: 2017-10-31 21:25:50 +0800 (週二, 31 十月 2017) $
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,8 +15,8 @@
  * more details.
  *
  */
-#ifndef _LINUX_NVT_TOUCH_H
-#define	_LINUX_NVT_TOUCH_H
+#ifndef		_LINUX_NVT_TOUCH_H
+#define		_LINUX_NVT_TOUCH_H
 
 #include <linux/i2c.h>
 #include <linux/input.h>
@@ -29,18 +29,15 @@
 
 #define NVT_DEBUG 0
 
-//---GPIO number---
-#define NVTTOUCH_RST_PIN 980
+/*---GPIO number---*/
 #define NVTTOUCH_INT_PIN 943
 
 
-//---INT trigger mode---
-//#define IRQ_TYPE_EDGE_RISING 1
-//#define IRQ_TYPE_EDGE_FALLING 2
+/*---INT trigger mode---*/
 #define INT_TRIGGER_TYPE IRQ_TYPE_EDGE_RISING
 
 
-//---I2C driver info.---
+/*---I2C driver info.---*/
 #define NVT_I2C_NAME "NVT-ts"
 #define I2C_BLDR_Address 0x01
 #define I2C_FW_Address 0x01
@@ -49,17 +46,18 @@
 #if NVT_DEBUG
 #define NVT_LOG(fmt, args...)    pr_err("[%s] %s %d: " fmt, NVT_I2C_NAME, __func__, __LINE__, ##args)
 #else
-#define NVT_LOG(fmt, args...)    pr_info("[%s] %s %d: " fmt, NVT_I2C_NAME, __func__, __LINE__, ##args)
+#define NVT_LOG(fmt, args...)    pr_debug("[%s] %s %d: " fmt, NVT_I2C_NAME, __func__, __LINE__, ##args)
 #endif
 #define NVT_ERR(fmt, args...)    pr_err("[%s] %s %d: " fmt, NVT_I2C_NAME, __func__, __LINE__, ##args)
 
-//---Input device info.---
+/*---Input device info.---*/
 #define NVT_TS_NAME "NVTCapacitiveTouchScreen"
 
 
-//---Touch info.---
-#define TOUCH_DEFAULT_MAX_WIDTH 720
-#define TOUCH_DEFAULT_MAX_HEIGHT 1512
+/*---Touch info.---*/
+#define TOUCH_COORDS_ARR_SIZE	2
+#define TOUCH_DEFAULT_MAX_WIDTH 1080
+#define TOUCH_DEFAULT_MAX_HEIGHT 2246
 #define TOUCH_MAX_FINGER_NUM 10
 #define TOUCH_KEY_NUM 0
 #if TOUCH_KEY_NUM > 0
@@ -67,10 +65,7 @@ extern const uint16_t touch_key_array[TOUCH_KEY_NUM];
 #endif
 #define TOUCH_FORCE_NUM 1000
 
-/* Enable only when module have tp reset pin and connected to host */
-#define NVT_TOUCH_SUPPORT_HW_RST 1
-
-//---Customerized func.---
+/*---Customerized func.---*/
 #define NVT_TOUCH_PROC 1
 #define NVT_TOUCH_EXT_PROC 1
 #define NVT_TOUCH_FW 1
@@ -83,10 +78,22 @@ extern const uint16_t gesture_key_array[];
 #endif
 #define BOOT_UPDATE_FIRMWARE 0
 #define BOOT_UPDATE_FIRMWARE_NAME "novatek_ts_fw.bin"
-
-//---ESD Protect.---
+/* ---ESD Protect.--- */
 #define NVT_TOUCH_ESD_PROTECT 1
 #define NVT_TOUCH_ESD_CHECK_PERIOD 2000	/* ms */
+
+/* charger detect */
+#define USB_DETECT_IN 1
+#define USB_DETECT_OUT 0
+#define CMD_CHARGER_ON (0x53)
+#define CMD_CHARGER_OFF (0x51)
+
+struct usb_charger_detection {
+	struct notifier_block charger_notif;
+	uint8_t usb_connected;
+	struct workqueue_struct *nvt_charger_notify_wq;
+	struct work_struct charger_notify_work;
+};
 
 struct nvt_ts_data {
 	struct i2c_client *client;
@@ -105,6 +112,8 @@ struct nvt_ts_data {
 	uint8_t y_num;
 	uint16_t abs_x_max;
 	uint16_t abs_y_max;
+	uint16_t def_x_max;
+	uint16_t def_y_max;
 	uint8_t max_touch_num;
 	uint8_t max_button_num;
 	uint32_t int_trigger_type;
@@ -116,6 +125,9 @@ struct nvt_ts_data {
 	const struct nvt_ts_mem_map *mmap;
 	uint8_t carrier_system;
 	uint16_t nvt_pid;
+	bool skip_reset_in_resume;
+	uint32_t charger_detection_enable;
+	struct usb_charger_detection *charger_detection;
 #if NVT_TOUCH_FW
 	int8_t product_id[10];
 	uint8_t suspended;
@@ -137,10 +149,10 @@ struct nvt_flash_data{
 #endif
 
 typedef enum {
-	RESET_STATE_INIT = 0xA0,// IC reset
-	RESET_STATE_REK,		// ReK baseline
-	RESET_STATE_REK_FINISH,	// baseline is ready
-	RESET_STATE_NORMAL_RUN,	// normal run
+	RESET_STATE_INIT = 0xA0,/* IC reset*/
+	RESET_STATE_REK,		/* ReK baseline*/
+	RESET_STATE_REK_FINISH,	/* baseline is ready*/
+	RESET_STATE_NORMAL_RUN,
 	RESET_STATE_MAX  = 0xAF
 } RST_COMPLETE_STATE;
 
@@ -170,10 +182,10 @@ typedef enum {
 } MP_TEST_RESULT;
 #endif
 
-//---extern structures---
+/*---extern structures---*/
 extern struct nvt_ts_data *ts;
 
-//---extern functions---
+/*---extern functions---*/
 extern int32_t CTP_I2C_READ(struct i2c_client *client, uint16_t address, uint8_t *buf, uint16_t len);
 extern int32_t CTP_I2C_WRITE(struct i2c_client *client, uint16_t address, uint8_t *buf, uint16_t len);
 extern void nvt_bootloader_reset(void);
