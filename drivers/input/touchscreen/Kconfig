@@ -1328,7 +1328,7 @@ config TOUCHSCREEN_EKTF3XXX_CHIPSET
 		  If unusre, say N.
 
 config TOUCHSCREEN_NOVATEK_CHIPSET
-        tristate "Novatek touchpanel Novatek series"
+        bool "Novatek touchpanel Novatek series"
         depends on I2C
         help
           Say Y here if you have a Novatek NT36525  touchscreen.
@@ -1338,5 +1338,6 @@ config TOUCHSCREEN_NOVATEK_CHIPSET
           If unsure, say N.
 
 source "drivers/input/touchscreen/nova_mmi/Kconfig"
+source "drivers/input/touchscreen/nova_36525_mmi/Kconfig"
 
 endif
