@@ -3,7 +3,7 @@
 
 #include <linux/i2c.h>
 #include <linux/delay.h>
-#include <linux/input/focaltech_mmi.h>
+#include <linux/input/focaltech_mmi_modules.h>
 #include "focaltech_upgrade_common.h"
 
 extern int fts_ctpm_auto_upgrade(struct i2c_client *client,
@@ -12,7 +12,6 @@ extern int fts_ctpm_auto_upgrade(struct i2c_client *client,
 
 int fts_ctpm_i2c_hid2std(struct i2c_client *client);
 
-#ifdef CONFIG_TOUCHSCREEN_FOCALTECH_UPGRADE_8006U_MMI
 #include <linux/fs.h>
 #include <linux/vmalloc.h>
 #include <linux/uaccess.h>
@@ -172,6 +171,7 @@ struct upgrade_func {
 	bool hid_supported;
 	bool pramboot_supported;
 	bool fts_8006u;
+	bool fts_5422u;
 	u8 *pramboot;
 	u32 pb_length;
 	int (*init)(void);
@@ -203,6 +203,8 @@ struct upgrade_fw {
 extern struct fts_upgrade *fwupgrade;
 extern struct upgrade_func upgrade_func_ft8006;
 extern struct upgrade_func upgrade_func_ft8006u;
+extern struct upgrade_func upgrade_func_ft5422u;
+extern struct ft_chip_t ft5422u_fct;
 
 /*****************************************************************************
 * Static function prototypes
@@ -225,8 +227,8 @@ int fts_pram_ecc_cal(struct i2c_client *client, u32 saddr, u32 len);
 int fts_pram_start(struct i2c_client *client);
 
 int fts_fwupg_do_upgrade(const char *fwname);
+int fts_lic_get_ver_in_tp(struct i2c_client *client, u8 *ver);
 
 int fts_extra_init(struct i2c_client *client, struct input_dev *input_dev, struct ft_ts_platform_data *pdata);
 int fts_extra_exit(void);
-#endif
 #endif

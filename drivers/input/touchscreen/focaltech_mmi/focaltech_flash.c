@@ -19,7 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/delay.h>
-#include <linux/input/focaltech_mmi.h>
+#include <linux/input/focaltech_mmi_modules.h>
 #include "focaltech_flash.h"
 #include "focaltech_upgrade_common.h"
 
@@ -366,23 +366,19 @@ int fts_ctpm_auto_upgrade(struct i2c_client *client,
 
 	FTS_DEBUG("[UPGRADE] set update function and type by ID\n");
 
-#ifdef CONFIG_TOUCHSCREEN_FOCALTECH_UPGRADE_8716_MMI
 	if (pdata->family_id == FT8716_ID) {
 		ft8716_set_upgrade_function(&fts_updatefun_curr);
 		ft8716_set_chip_id(&fts_chip_type_curr);
 	}
-#endif
-#ifdef CONFIG_TOUCHSCREEN_FOCALTECH_UPGRADE_5X46_MMI
+
 	if (pdata->family_id == FT5X46_ID) {
 		ft5x46_set_upgrade_function(&fts_updatefun_curr);
 		ft5x46_set_chip_id(&fts_chip_type_curr);
 	}
-#endif
-#ifdef CONFIG_TOUCHSCREEN_FOCALTECH_UPGRADE_8006U_MMI
-	if (pdata->family_id == FT8006U_ID) {
+
+	if ((pdata->family_id == FT8006U_ID) || (pdata->family_id == FT5422U_ID)) {
 		return fts_fwupg_do_upgrade(fw_name);
 	}
-#endif
 
 	/* no IC upgrade function enabled, return error */
 	if ((fts_updatefun_curr == NULL) || (fts_chip_type_curr == NULL)) {
@@ -422,7 +418,6 @@ int fts_ctpm_auto_upgrade(struct i2c_client *client,
 	return i_ret;
 }
 
-#ifdef CONFIG_TOUCHSCREEN_FOCALTECH_UPGRADE_8006U_MMI
 struct fts_upgrade g_upgrade;
 struct fts_upgrade *fwupgrade;
 
@@ -1570,7 +1565,7 @@ static int fts_lic_get_vid_in_host(u16 *vid)
 	return 0;
 }
 
-static int fts_lic_get_ver_in_tp(struct i2c_client *client, u8 *ver)
+int fts_lic_get_ver_in_tp(struct i2c_client *client, u8 *ver)
 {
 	int ret = 0;
 
@@ -1629,19 +1624,16 @@ static bool fts_lic_need_upgrade(struct i2c_client *client)
 	ret = fts_lic_get_vid_in_host(&vid_in_host);
 	if (ret < 0) {
 		FTS_ERROR("[UPGRADE]vendor id in host invalid\n");
-		return false;
 	}
 
 	ret = fts_lic_get_vid_in_tp(client, &vid_in_tp);
 	if (ret < 0) {
 		FTS_ERROR("[UPGRADE]vendor id in tp invalid\n");
-		return false;
 	}
 
 	FTS_DEBUG("[UPGRADE]vid in tp:%x, host:%x\n", vid_in_tp, vid_in_host);
 	if (vid_in_tp != vid_in_host) {
 		FTS_INFO("[UPGRADE]vendor id in tp&host are different, no upgrade lic\n");
-		return false;
 	}
 
 	ret = fts_lic_get_ver_in_host(&initcode_ver_in_host);
@@ -1998,14 +1990,16 @@ int fts_extra_init(struct i2c_client *client, struct input_dev *input_dev, struc
 	fts_data->pdata = pdata;
 
 	if (FT8006U_ID == type) {
-#ifdef CONFIG_TOUCHSCREEN_FOCALTECH_UPGRADE_8006U_MMI
 		FTS_AUTO_LIC_UPGRADE_EN = true;
 		fwupgrade->func = &upgrade_func_ft8006u;
 		fts_data->ic_info.ids = ft8006u_fct;
 		fts_data->ic_info.is_incell = true;
 		fts_data->ic_info.hid_supported = false;
-#endif
-	}
+	} else if (FT5422U_ID == type) {
+		fwupgrade->func = &upgrade_func_ft5422u;
+		fts_data->ic_info.ids = ft5422u_fct;
+		fts_data->ic_info.is_incell = false;
+		fts_data->ic_info.hid_supported = true;
+        }
 	return 0;
 }
-#endif
