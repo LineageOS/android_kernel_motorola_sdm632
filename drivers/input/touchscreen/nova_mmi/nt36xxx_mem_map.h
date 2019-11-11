@@ -1,8 +1,8 @@
 /*
  * Copyright (C) 2010 - 2017 Novatek, Inc.
  *
- * $Revision: 20544 $
- * $Date: 2017-12-20 11:08:15 +0800 (Wed, 20 Dec 2017) $
+ * $Revision: 26970 $
+ * $Date: 2018-04-25 09:34:01 +0800 (週三, 25 四月 2018) $
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -181,7 +181,17 @@ struct nvt_ts_trim_id_table {
 };
 
 static const struct nvt_ts_trim_id_table trim_id_table[] = {
+	{.id = {0x0A, 0xFF, 0xFF, 0x72, 0x65, 0x03}, .mask = {1, 0, 0, 1, 1, 1},
+		.mmap = &NT36672A_memory_map, .carrier_system = 0},
 	{.id = {0x0A, 0xFF, 0xFF, 0x72, 0x66, 0x03}, .mask = {1, 0, 0, 1, 1, 1},
+		.mmap = &NT36672A_memory_map, .carrier_system = 0},
+	{.id = {0x0A, 0xFF, 0xFF, 0x82, 0x66, 0x03}, .mask = {1, 0, 0, 1, 1, 1},
+		.mmap = &NT36672A_memory_map, .carrier_system = 0},
+	{.id = {0x0A, 0xFF, 0xFF, 0x70, 0x66, 0x03}, .mask = {1, 0, 0, 1, 1, 1},
+		.mmap = &NT36672A_memory_map, .carrier_system = 0},
+	{.id = {0x0B, 0xFF, 0xFF, 0x70, 0x66, 0x03}, .mask = {1, 0, 0, 1, 1, 1},
+		.mmap = &NT36672A_memory_map, .carrier_system = 0},
+	{.id = {0x0A, 0xFF, 0xFF, 0x72, 0x67, 0x03}, .mask = {1, 0, 0, 1, 1, 1},
 		.mmap = &NT36672A_memory_map, .carrier_system = 0},
 	{.id = {0x55, 0x00, 0xFF, 0x00, 0x00, 0x00}, .mask = {1, 1, 0, 1, 1, 1},
 		.mmap = &NT36772_memory_map, .carrier_system = 0},
