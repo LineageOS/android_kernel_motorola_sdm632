@@ -19,3 +19,4 @@ obj-$(CONFIG_EXTCON_RT8973A)	+= extcon-rt8973a.o
 obj-$(CONFIG_EXTCON_SM5502)	+= extcon-sm5502.o
 obj-$(CONFIG_EXTCON_USB_GPIO)	+= extcon-usb-gpio.o
 obj-$(CONFIG_EXTCON_MADERA)	+= extcon-madera.o
+EXTRA_CFLAGS += -DCONFIG_EXTCON_MADERA_INPUT_EVENT
