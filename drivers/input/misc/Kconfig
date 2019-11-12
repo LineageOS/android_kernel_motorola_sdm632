@@ -902,4 +902,12 @@ config INPUT_EGISTEC_FPS
 	 Say Y here if you wish to include support for EGIS finger print sensor.
 	 If unsure, say N.
 
+config INPUT_ABOV
+	tristate "ABOV_SAR_sensor"
+	depends on I2C
+	default n
+	help
+	  Say Y to enable the SAR detection application, if N here not to use the
+	  this SAR sensor
+
 endif
