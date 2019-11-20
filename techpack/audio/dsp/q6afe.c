@@ -407,6 +407,7 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 	afe_callback_debug_print(data);
 	if (data->opcode == AFE_PORT_CMDRSP_GET_PARAM_V2) {
 		uint32_t *payload = data->payload;
+
 		if (!payload || (data->token >= AFE_MAX_PORTS)) {
 			pr_err("%s: Error: size %d payload %pK token %d\n",
 				__func__, data->payload_size,
@@ -430,9 +431,9 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 			atomic_set(&this_afe.state, 0);
 #endif
 		} else {
-			if (rtac_make_afe_callback(data->payload,
-						   data->payload_size))
-				return 0;
+		if (rtac_make_afe_callback(data->payload,
+					   data->payload_size))
+			return 0;
 
 #ifdef CONFIG_SND_SOC_NXP_TFA9874
 		if (atomic_read(&this_afe.tfa_state) == 1) {
@@ -1054,7 +1055,7 @@ static void afe_send_custom_topology(void)
 		goto unlock;
 	this_afe.set_custom_topology = 0;
 	cal_block = cal_utils_get_only_cal_block(this_afe.cal_data[cal_index]);
-	if (cal_block == NULL) {
+	if (cal_block == NULL || cal_utils_is_cal_stale(cal_block)) {
 		pr_err("%s cal_block not found!!\n", __func__);
 		goto unlock;
 	}
@@ -1523,7 +1524,9 @@ static struct cal_block_data *afe_find_cal_topo_id_by_port(
 		&cal_type->cal_blocks) {
 		cal_block = list_entry(ptr,
 			struct cal_block_data, list);
-
+		/* Skip cal_block if it is already marked stale */
+		if (cal_utils_is_cal_stale(cal_block))
+			continue;
 		path = ((afe_get_port_type(port_id) ==
 			MSM_AFE_PORT_TYPE_TX)?(TX_DEVICE):(RX_DEVICE));
 		afe_top =
@@ -1551,6 +1554,11 @@ err_exit:
 	return NULL;
 }
 
+/*
+ * Retrieving cal_block will mark cal_block as stale.
+ * Hence it cannot be reused or resent unless the flag
+ * is reset.
+ */
 static int afe_get_cal_topology_id(u16 port_id, u32 *topology_id,
 				   int cal_type_index)
 {
@@ -1560,7 +1568,8 @@ static int afe_get_cal_topology_id(u16 port_id, u32 *topology_id,
 	struct audio_cal_info_afe_top   *afe_top_info = NULL;
 
 	if (this_afe.cal_data[cal_type_index] == NULL) {
-		pr_err("%s: [AFE_TOPOLOGY_CAL] not initialized\n", __func__);
+		pr_err("%s: cal_type %d not initialized\n", __func__,
+			cal_type_index);
 		return -EINVAL;
 	}
 	if (topology_id == NULL) {
@@ -1573,8 +1582,8 @@ static int afe_get_cal_topology_id(u16 port_id, u32 *topology_id,
 	cal_block = afe_find_cal_topo_id_by_port(
 		this_afe.cal_data[cal_type_index], port_id);
 	if (cal_block == NULL) {
-		pr_debug("%s: [AFE_TOPOLOGY_CAL] not initialized for this port %d\n",
-				__func__, port_id);
+		pr_err("%s: cal_type %d not initialized for this port %d\n",
+			__func__, cal_type_index, port_id);
 		ret = -EINVAL;
 		goto unlock;
 	}
@@ -1588,6 +1597,7 @@ static int afe_get_cal_topology_id(u16 port_id, u32 *topology_id,
 		goto unlock;
 	}
 	*topology_id = (u32)afe_top_info->topology;
+	cal_utils_mark_cal_used(cal_block);
 
 	pr_debug("%s: port_id = %u acdb_id = %d topology_id = %u ret=%d\n",
 		__func__, port_id, afe_top_info->acdb_id,
@@ -1766,7 +1776,7 @@ static int send_afe_cal_type(int cal_index, int port_id)
 		cal_block = cal_utils_get_only_cal_block(
 				this_afe.cal_data[cal_index]);
 
-	if (cal_block == NULL) {
+	if (cal_block == NULL || cal_utils_is_cal_stale(cal_block)) {
 		pr_err("%s cal_block not found!!\n", __func__);
 		ret = -EINVAL;
 		goto unlock;
@@ -1785,6 +1795,9 @@ static int send_afe_cal_type(int cal_index, int port_id)
 	if (ret < 0)
 		pr_debug("%s: No cal sent for cal_index %d, port_id = 0x%x! ret %d\n",
 			__func__, cal_index, port_id, ret);
+
+	cal_utils_mark_cal_used(cal_block);
+
 unlock:
 	mutex_unlock(&this_afe.cal_data[cal_index]->lock);
 done:
@@ -3238,7 +3251,7 @@ static int q6afe_send_enc_config(u16 port_id,
 				 union afe_enc_config_data *cfg, u32 format,
 				 union afe_port_config afe_config,
 				 u16 afe_in_channels, u16 afe_in_bit_width,
-				 u32 scrambler_mode)
+				 u32 scrambler_mode, u32 mono_mode)
 {
 	struct afe_audioif_config_command config;
 	int index;
@@ -3294,6 +3307,15 @@ static int q6afe_send_enc_config(u16 port_id,
 		config.port.enc_blk_param.enc_cfg_blk_size =
 				sizeof(config.port.enc_blk_param.enc_blk_config)
 					- sizeof(struct afe_abr_enc_cfg_t);
+	} else if (format == ASM_MEDIA_FMT_AAC_V2) {
+		config.param.payload_size = payload_size
+				+ sizeof(config.port.enc_blk_param)
+				- sizeof(struct asm_aac_frame_size_control_t);
+		config.pdata.param_size = sizeof(config.port.enc_blk_param)
+				- sizeof(struct asm_aac_frame_size_control_t);
+		config.port.enc_blk_param.enc_cfg_blk_size =
+				sizeof(config.port.enc_blk_param.enc_blk_config)
+				- sizeof(struct asm_aac_frame_size_control_t);
 	} else {
 		config.param.payload_size = payload_size
 					+ sizeof(config.port.enc_blk_param);
@@ -3310,6 +3332,33 @@ static int q6afe_send_enc_config(u16 port_id,
 		pr_err("%s: AFE_ENCODER_PARAM_ID_ENC_CFG_BLK for port 0x%x failed %d\n",
 			__func__, port_id, ret);
 		goto exit;
+	}
+
+	if (format == ASM_MEDIA_FMT_AAC_V2) {
+		uint32_t frame_size_ctl_value = config.port.enc_blk_param.
+				enc_blk_config.aac_config.frame_ctl.ctl_value;
+		if (frame_size_ctl_value > 0) {
+			config.param.payload_size =
+				payload_size +
+				sizeof(config.port.frame_ctl_param);
+			config.pdata.param_id =
+				AFE_PARAM_ID_AAC_FRM_SIZE_CONTROL;
+			config.pdata.param_size =
+				sizeof(config.port.frame_ctl_param);
+			config.port.frame_ctl_param.ctl_type =
+				config.port.enc_blk_param.enc_blk_config.
+					aac_config.frame_ctl.ctl_type;
+			config.port.frame_ctl_param.ctl_value =
+				frame_size_ctl_value;
+			pr_debug("%s: send AFE_PARAM_ID_AAC_FRM_SIZE_CONTROL\n",
+				  __func__);
+			ret = afe_apr_send_pkt(&config, &this_afe.wait[index]);
+			if (ret) {
+				pr_err("%s: AAC_FRM_SIZE_CONTROL failed %d\n",
+					__func__, ret);
+				goto exit;
+			}
+		}
 	}
 
 	if (format == ASM_MEDIA_FMT_APTX) {
@@ -3357,6 +3406,21 @@ static int q6afe_send_enc_config(u16 port_id,
 		pr_err("%s: AFE_ENCODER_PARAM_ID_ENABLE_SCRAMBLING for port 0x%x failed %d\n",
 			__func__, port_id, ret);
 		goto exit;
+	}
+
+	if (format == ASM_MEDIA_FMT_APTX) {
+		config.param.payload_size =
+			payload_size + sizeof(config.port.channel_mode_param);
+		pr_debug("%s:sending CAPI_V2_PARAM_ID_APTX_ENC_SWITCH_TO_MONO mode= %d to DSP payload\n",
+			__func__, mono_mode);
+		config.pdata.param_id = CAPI_V2_PARAM_ID_APTX_ENC_SWITCH_TO_MONO;
+		config.pdata.param_size = sizeof(config.port.channel_mode_param);
+		config.port.channel_mode_param.channel_mode = mono_mode;
+                ret = afe_apr_send_pkt(&config, &this_afe.wait[index]);
+		if (ret) {
+			pr_err("%s: CAPI_V2_PARAM_ID_APTX_ENC_SWITCH_TO_MONO for port 0x%x failed %d\n",
+				__func__, port_id, ret);
+		}
 	}
 
 	if (format == ASM_MEDIA_FMT_LDAC) {
@@ -3433,10 +3497,61 @@ exit:
 	return ret;
 }
 
+int afe_set_tws_channel_mode(u16 port_id, u32 channel_mode)
+{
+	struct aptx_channel_mode_param_t channel_mode_param;
+	int ret = 0;
+	int index = 0;
+
+	pr_debug("%s: enter\n", __func__);
+	index = q6audio_get_port_index(port_id);
+	if (index < 0 || index >= AFE_MAX_PORTS) {
+		pr_err("%s: AFE port index[%d] invalid!\n",
+			__func__, index);
+		return -EINVAL;
+	}
+
+	ret = q6audio_validate_port(port_id);
+	if (ret < 0) {
+		pr_err("%s: port id: 0x%x ret %d\n", __func__, port_id, ret);
+		return -EINVAL;
+	}
+
+	channel_mode_param.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
+					APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
+	channel_mode_param.hdr.pkt_size = sizeof(channel_mode_param);
+	channel_mode_param.hdr.src_port = 0;
+	channel_mode_param.hdr.dest_port = 0;
+	channel_mode_param.hdr.token = index;
+
+	channel_mode_param.hdr.opcode = AFE_PORT_CMD_SET_PARAM_V2;
+	channel_mode_param.param.payload_size = sizeof(channel_mode_param) - sizeof(struct apr_hdr)
+						- sizeof(channel_mode_param.param);
+
+	channel_mode_param.param.payload_address_lsw = 0x00;
+	channel_mode_param.param.payload_address_msw = 0x00;
+	channel_mode_param.param.mem_map_handle = 0x00;
+	channel_mode_param.param.port_id = q6audio_get_port_id(port_id);
+	channel_mode_param.pdata.module_id = AFE_MODULE_ID_ENCODER;
+	channel_mode_param.pdata.param_id = CAPI_V2_PARAM_ID_APTX_ENC_SWITCH_TO_MONO;
+	channel_mode_param.pdata.param_size =  sizeof(channel_mode_param.channel_mode);
+
+	channel_mode_param.channel_mode = channel_mode;
+
+	ret = afe_apr_send_pkt(&channel_mode_param, &this_afe.wait[index]);
+
+	if (ret)
+		pr_err("%s: AFE set channel mode cfg for port 0x%x failed %d\n",
+			__func__, port_id, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL(afe_set_tws_channel_mode);
+
 static int __afe_port_start(u16 port_id, union afe_port_config *afe_config,
 			    u32 rate, u16 afe_in_channels, u16 afe_in_bit_width,
 			    union afe_enc_config_data *enc_cfg,
-			    u32 codec_format, u32 scrambler_mode,
+			    u32 codec_format, u32 scrambler_mode, u32 mono_mode,
 			    struct afe_dec_config *dec_cfg)
 {
 	struct afe_audioif_config_command config;
@@ -3704,7 +3819,7 @@ static int __afe_port_start(u16 port_id, union afe_port_config *afe_config,
 						    codec_format, *afe_config,
 						    afe_in_channels,
 						    afe_in_bit_width,
-						    scrambler_mode);
+						    scrambler_mode, mono_mode);
 			if (ret) {
 				pr_err("%s: AFE encoder config for port 0x%x failed %d\n",
 					__func__, port_id, ret);
@@ -3769,7 +3884,7 @@ int afe_port_start(u16 port_id, union afe_port_config *afe_config,
 		   u32 rate)
 {
 	return __afe_port_start(port_id, afe_config, rate,
-				0, 0, NULL, ASM_MEDIA_FMT_NONE, 0, NULL);
+				0, 0, NULL, ASM_MEDIA_FMT_NONE, 0, 0, NULL);
 }
 EXPORT_SYMBOL(afe_port_start);
 
@@ -3798,11 +3913,12 @@ int afe_port_start_v2(u16 port_id, union afe_port_config *afe_config,
 		ret = __afe_port_start(port_id, afe_config, rate,
 					afe_in_channels, afe_in_bit_width,
 					&enc_cfg->data, enc_cfg->format,
-					enc_cfg->scrambler_mode, NULL);
+					enc_cfg->scrambler_mode, 
+                                        enc_cfg->mono_mode, NULL);
 	else if (dec_cfg != NULL)
 		ret = __afe_port_start(port_id, afe_config, rate,
 					afe_in_channels, afe_in_bit_width,
-					NULL, dec_cfg->format, 0, dec_cfg);
+					NULL, dec_cfg->format, 0, 0, dec_cfg);
 
 	return ret;
 }
@@ -5795,7 +5911,7 @@ static int afe_sidetone_iir(u16 tx_port_id)
 	}
 	mutex_lock(&this_afe.cal_data[cal_index]->lock);
 	cal_block = cal_utils_get_only_cal_block(this_afe.cal_data[cal_index]);
-	if (cal_block == NULL) {
+	if (cal_block == NULL || cal_utils_is_cal_stale(cal_block)) {
 		pr_err("%s: cal_block not found\n ", __func__);
 		mutex_unlock(&this_afe.cal_data[cal_index]->lock);
 		ret = -EINVAL;
@@ -5901,7 +6017,7 @@ static int afe_sidetone(u16 tx_port_id, u16 rx_port_id, bool enable)
 	}
 	mutex_lock(&this_afe.cal_data[cal_index]->lock);
 	cal_block = cal_utils_get_only_cal_block(this_afe.cal_data[cal_index]);
-	if (cal_block == NULL) {
+	if (cal_block == NULL || cal_utils_is_cal_stale(cal_block)) {
 		pr_err("%s: cal_block not found\n", __func__);
 		mutex_unlock(&this_afe.cal_data[cal_index]->lock);
 		ret = -EINVAL;
@@ -7447,6 +7563,9 @@ static struct cal_block_data *afe_find_hw_delay_by_path(
 		cal_block = list_entry(ptr,
 			struct cal_block_data, list);
 
+		if (cal_utils_is_cal_stale(cal_block))
+			continue;
+
 		if (((struct audio_cal_info_hw_delay *)cal_block->cal_info)
 			->path == path) {
 			return cal_block;
@@ -7510,6 +7629,8 @@ static int afe_get_cal_hw_delay(int32_t path,
 		ret = -EFAULT;
 		goto unlock;
 	}
+
+	cal_utils_mark_cal_used(cal_block);
 	pr_debug("%s: Path = %d samplerate = %u usec = %u status %d\n",
 		 __func__, path, entry->sample_rate, entry->delay_usec, ret);
 unlock:

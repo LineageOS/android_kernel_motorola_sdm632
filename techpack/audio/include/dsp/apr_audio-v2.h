@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3250,11 +3250,25 @@ struct afe_param_id_aptx_sync_mode {
  */
 #define AFE_DECODER_PARAM_ID_DEPACKETIZER_ID        0x00013235
 
+#define CAPI_V2_PARAM_ID_APTX_ENC_SWITCH_TO_MONO    0x0001332A
+
+struct aptx_channel_mode_param_t {
+	struct apr_hdr hdr;
+	struct afe_port_cmd_set_param_v2 param;
+	struct afe_port_param_data_v2 pdata;
+	u32 channel_mode;
+} __packed;
 /*
  * Data format to send compressed data
  * is transmitted/received over Slimbus lines.
  */
 #define AFE_SB_DATA_FORMAT_GENERIC_COMPRESSED    0x3
+
+/*
+ * Parameter to send frame control size
+ * to DSP for AAC encoder in AFE.
+ */
+#define AFE_PARAM_ID_AAC_FRM_SIZE_CONTROL 0x000132EA
 
 /*
  * ID for AFE port module. This will be used to define port properties.
@@ -3424,6 +3438,23 @@ struct asm_aac_enc_cfg_v2_t {
 	 * The sampling rate must not change during encoding.
 	 */
 	uint32_t     sample_rate;
+} __packed;
+
+/* Structure to control frame size of AAC encoded frames. */
+struct asm_aac_frame_size_control_t {
+	/* Type of frame size control: MTU_SIZE / PEAK_BIT_RATE*/
+	uint32_t ctl_type;
+	/*
+	 * Control value
+	 * MTU_SIZE: MTU size in bytes
+	 * PEAK_BIT_RATE: Peak bitrate in bits per second.
+	 */
+	uint32_t ctl_value;
+} __packed;
+
+struct asm_aac_enc_cfg_t {
+	struct asm_aac_enc_cfg_v2_t aac_cfg;
+	struct asm_aac_frame_size_control_t frame_ctl;
 } __packed;
 
 /* FMT ID for apt-X Classic */
@@ -3620,7 +3651,7 @@ struct afe_port_media_type_t {
 
 union afe_enc_config_data {
 	struct asm_sbc_enc_cfg_t sbc_config;
-	struct asm_aac_enc_cfg_v2_t aac_config;
+	struct asm_aac_enc_cfg_t aac_config;
 	struct asm_custom_enc_cfg_t  custom_config;
 	struct asm_celt_enc_cfg_t  celt_config;
 	struct asm_aptx_enc_cfg_t  aptx_config;
@@ -3630,6 +3661,7 @@ union afe_enc_config_data {
 struct afe_enc_config {
 	u32 format;
 	u32 scrambler_mode;
+	u32 mono_mode;
 	union afe_enc_config_data data;
 };
 
@@ -3668,6 +3700,18 @@ struct avs_enc_set_scrambler_param_t {
 	 *  0 : disable scrambler
 	 */
 	uint32_t enable_scrambler;
+};
+
+/*
+ * Payload of the CAPI_V2_PARAM_ID_APTX_ENC_SWITCH_TO_MONO parameter.
+ */
+struct afe_enc_set_channel_mode_param_t {
+	/*
+	*  Supported values:
+	*  1 : mono
+	*  2 : dual_mono
+	*/
+	u32 channel_mode;
 };
 
 /*
@@ -3717,6 +3761,7 @@ union afe_port_config {
 	struct afe_param_id_tdm_cfg               tdm;
 	struct afe_param_id_usb_audio_cfg         usb_audio;
 	struct afe_param_id_aptx_sync_mode        sync_mode_param;
+	struct asm_aac_frame_size_control_t       frame_ctl_param;
 	struct afe_enc_fmt_id_param_t             enc_fmt;
 	struct afe_port_media_type_t              media_type;
 	struct afe_enc_cfg_blk_param_t            enc_blk_param;
@@ -3725,6 +3770,7 @@ union afe_port_config {
 	struct avs_dec_depacketizer_id_param_t    dec_depkt_id_param;
 	struct afe_enc_level_to_bitrate_map_param_t    map_param;
 	struct afe_enc_dec_imc_info_param_t       imc_info_param;
+	struct afe_enc_set_channel_mode_param_t   channel_mode_param;
 } __packed;
 
 struct afe_audioif_config_command_no_payload {
@@ -4307,8 +4353,13 @@ struct asm_softvolume_params {
 /* Rear left of center. */
 #define PCM_CHANNEL_RLC  15
 
-/* Rear right of center. */
+/* Rear right of center. Update PCM_MAX_CHMAP_ID when
+ * this list is extended.
+ */
 #define PCM_CHANNEL_RRC  16
+
+/* Max valid channel map index */
+#define PCM_MAX_CHMAP_ID PCM_CHANNEL_RRC
 
 #define PCM_FORMAT_MAX_NUM_CHANNEL  8
 
@@ -10037,7 +10088,7 @@ struct afe_clk_set {
 	 * for enable and disable clock.
 	 *	"clk_freq_in_hz", "clk_attri", and "clk_root"
 	 *	are ignored in disable clock case.
-	 *	@values 
+	 *	@valuesï¿½
 	 *	- 0 -- Disabled
 	 *	- 1 -- Enabled  @tablebulletend
 	 */

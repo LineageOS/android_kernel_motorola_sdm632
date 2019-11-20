@@ -3877,6 +3877,7 @@ static int msm8952_asoc_machine_probe(struct platform_device *pdev)
 			goto err;
 		}
 	}
+
 	muxsel = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 			"csr_gp_io_mux_mic_ext_clk_ctl");
 	if (!muxsel) {
