@@ -480,22 +480,6 @@ static int msm_tfa9874_quin_mi2s_rx_be_hw_params_fixup(struct snd_soc_pcm_runtim
        return 0;
 }
 
-static int msm_aw882xx_quin_mi2s_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
-                            struct snd_pcm_hw_params *params)
-{
-       struct snd_interval *rate = hw_param_interval(params,
-                                   SNDRV_PCM_HW_PARAM_RATE);
-       struct snd_interval *channels = hw_param_interval(params,
-                                   SNDRV_PCM_HW_PARAM_CHANNELS);
-       pr_debug("%s: Enter Num of channels = %d Sample rate = %d\n", __func__,
-                     msm_pri_mi2s_rx_ch, mi2s_rx_sample_rate);
-       rate->min = rate->max = SAMPLING_RATE_48KHZ;
-       channels->min = channels->max = 2;
-       pr_debug("%s: Exit Num of channels = %d Sample rate = %d\n", __func__,
-                     msm_pri_mi2s_rx_ch, mi2s_rx_sample_rate);
-       return 0;
-}
-
 static int msm_mi2s_rx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 				struct snd_pcm_hw_params *params)
 {
@@ -604,20 +588,6 @@ static int msm_proxy_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 }
 
 static int msm_tfa9874_quin_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
-                          struct snd_pcm_hw_params *params)
-{
-       pr_debug("%s(): substream = %s  stream = %d\n", __func__,
-              substream->name, substream->stream);
-       if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-              param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
-                            SNDRV_PCM_FORMAT_S16_LE);
-       else
-              param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
-                            SNDRV_PCM_FORMAT_S16_LE);
-       return 0;
-}
-
-static int msm_aw882xx_quin_mi2s_snd_hw_params(struct snd_pcm_substream *substream,
                           struct snd_pcm_hw_params *params)
 {
        pr_debug("%s(): substream = %s  stream = %d\n", __func__,
@@ -1688,11 +1658,6 @@ static struct snd_soc_ops msm8952_tfa9874_quin_mi2s_be_ops = {
        .shutdown = msm_quin_mi2s_snd_shutdown,
 };
 
-static struct snd_soc_ops msm8952_aw882xx_quin_mi2s_be_ops = {
-       .startup = msm_quin_mi2s_snd_startup,
-       .hw_params = msm_aw882xx_quin_mi2s_snd_hw_params,
-       .shutdown = msm_quin_mi2s_snd_shutdown,
-};
 
 static struct snd_soc_ops msm8952_quin_mi2s_be_ops = {
 	.startup = msm_quin_mi2s_snd_startup,
@@ -2877,8 +2842,8 @@ static struct snd_soc_dai_link msm8952_aw882xx_quin_dai_link[] = {
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.id = MSM_BACKEND_DAI_QUINARY_MI2S_RX,
-		.be_hw_params_fixup = msm_aw882xx_quin_mi2s_rx_be_hw_params_fixup,
-		.ops = &msm8952_aw882xx_quin_mi2s_be_ops,
+		.be_hw_params_fixup = msm_mi2s_rx_be_hw_params_fixup,
+		.ops = &msm8952_quin_mi2s_be_ops,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
 	},
@@ -2892,8 +2857,8 @@ static struct snd_soc_dai_link msm8952_aw882xx_quin_dai_link[] = {
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.id = MSM_BACKEND_DAI_QUINARY_MI2S_TX,
-		.be_hw_params_fixup = msm_aw882xx_quin_mi2s_rx_be_hw_params_fixup,
-		.ops = &msm8952_aw882xx_quin_mi2s_be_ops,
+		.be_hw_params_fixup = msm_be_hw_params_fixup,
+		.ops = &msm8952_quin_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
 	#ifdef CONFIG_SND_SOC_AWINIC_AW882XX
