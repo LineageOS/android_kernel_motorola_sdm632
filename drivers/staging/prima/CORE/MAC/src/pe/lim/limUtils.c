@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1140,6 +1140,9 @@ limCleanupMlm(tpAniSirGlobal pMac)
 
         tx_timer_deactivate(&pMac->lim.limTimers.g_lim_ap_ecsa_timer);
         tx_timer_delete(&pMac->lim.limTimers.g_lim_ap_ecsa_timer);
+
+        tx_timer_deactivate(&pMac->lim.limTimers.sae_auth_timer);
+        tx_timer_delete(&pMac->lim.limTimers.sae_auth_timer);
 
         pMac->lim.gLimTimersCreated = 0;
     }
@@ -2967,10 +2970,11 @@ void lim_handle_ecsa_req(tpAniSirGlobal mac_ctx, struct ecsa_frame_params *ecsa_
    session->gLimChannelSwitch.secondarySubBand = PHY_SINGLE_CHANNEL_CENTERED;
    session->gLimWiderBWChannelSwitch.newChanWidth = 0;
 
-   ch_offset = limGetOffChMaxBwOffsetFromChannel(
-                       mac_ctx->scan.countryCodeCurrent,
-                       ecsa_req->new_channel,
-                       sta_ds->mlmStaContext.vhtCapability);
+   ch_offset =
+       lim_get_channel_width_from_opclass(mac_ctx->scan.countryCodeCurrent,
+                                          ecsa_req->new_channel,
+                                          sta_ds->mlmStaContext.vhtCapability,
+                                          ecsa_req->op_class);
    if (ch_offset == BW80) {
        session->gLimWiderBWChannelSwitch.newChanWidth =
                                   WNI_CFG_VHT_CHANNEL_WIDTH_80MHZ;

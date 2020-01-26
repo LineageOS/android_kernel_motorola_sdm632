@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -179,10 +179,6 @@ static const hdd_freq_chan_map_t freq_chan_map[] = { {2412, 1}, {2417, 2},
 #define  WE_SET_MODULATED_DTIM    26
 #define WLAN_SET_DYNNAMIC_AGGREGATION 27
 
-// BEGIN IKSWM-15907, Motorola, w18918
-#define WE_SET_CHANNEL_RANGE 90
-// END IKSWM-15907, Motorola, w18918
-
 /* Private ioctls and their sub-ioctls */
 #define WLAN_PRIV_SET_NONE_GET_INT    (SIOCIWFIRSTPRIV + 1)
 #define WE_GET_11D_STATE     1
@@ -193,8 +189,7 @@ static const hdd_freq_chan_map_t freq_chan_map[] = { {2412, 1}, {2417, 2},
 #define WE_GET_WDI_DBG       7
 #define WE_GET_SAP_AUTO_CHANNEL_SELECTION 8
 #define WE_GET_CONCURRENCY_MODE 9
-#define WE_GET_MCC_MODE      10 /* MOTOROLA IKJB42MAIN-274 */
-#define WE_GET_SCAN_BAND_PREFERENCE     12
+#define WE_GET_SCAN_BAND_PREFERENCE     10
 #define WE_GET_ANTENA_DIVERSITY_SELECTION 11
 /* Private ioctls and their sub-ioctls */
 #define WLAN_PRIV_SET_INT_GET_INT     (SIOCIWFIRSTPRIV + 2)
@@ -215,9 +210,6 @@ static const hdd_freq_chan_map_t freq_chan_map[] = { {2412, 1}, {2417, 2},
 #define WE_SET_WLAN_DBG      1
 #define WE_SET_WDI_DBG       2
 #define WE_SET_SAP_CHANNELS  3
-//Begin Motorola dcw476 4/17/13 IKJBXLINE-5577:changing wlan driver log level dynamically
-#define WE_SET_WLAN_DBG_TILL_LEVEL 4
-//END IKJBXLINE-5577
 
 /* Private ioctls and their sub-ioctls */
 #define WLAN_PRIV_GET_CHAR_SET_NONE   (SIOCIWFIRSTPRIV + 5)
@@ -1010,7 +1002,7 @@ VOS_STATUS wlan_hdd_get_rssi(hdd_adapter_t *pAdapter, v_S7_t *rssi_value)
 
    if (eConnectionState_Associated != pHddStaCtx->conn_info.connState)
    {
-       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, "%s:Not associated, rssi on Disconnect : %d",
+       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, "%s:Not associated, rssi on Disconnect : %d",
                     __func__, pAdapter->rssi_on_disconnect);
        *rssi_value = pAdapter->rssi_on_disconnect;
        return VOS_STATUS_SUCCESS;
@@ -4145,13 +4137,6 @@ static int __iw_set_priv(struct net_device *dev,
         hddLog( VOS_TRACE_LEVEL_INFO, "pnoforce");
         /*TODO: support pnoforce*/
     }
-    else if( strncasecmp(cmd, "pno",3) == 0 ) {
-
-        hddLog( VOS_TRACE_LEVEL_INFO, "pno");
-        vos_status = iw_set_pno(dev, info, wrqu, cmd, 3);
-        kfree(cmd);
-        return (vos_status == VOS_STATUS_SUCCESS) ? 0 : -EINVAL;
-    }
     else if( strncasecmp(cmd, "rssifilter",10) == 0 ) {
         hddLog( VOS_TRACE_LEVEL_INFO, "rssifilter");
         vos_status = iw_set_rssi_filter(dev, info, wrqu, cmd, 10);
@@ -5523,10 +5508,9 @@ static int __iw_setint_getnone(struct net_device *dev,
     hdd_wext_state_t  *pWextState;
     hdd_context_t *pHddCtx;
     hdd_mon_ctx_t *pMonCtx = NULL;
-    int cmd_len = wrqu->data.length;
-    int *value = (int *) kmalloc(cmd_len+1, GFP_KERNEL);
-    int sub_cmd;
-    int set_value;
+    int *value = (int *)extra;
+    int sub_cmd = value[0];
+    int set_value = value[1];
     int ret = 0; /* success */
     int enable_pbm, enable_mp;
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -5567,18 +5551,6 @@ static int __iw_setint_getnone(struct net_device *dev,
                     "%s: pWextState is NULL",__func__);
           return -EINVAL;
       }
-    if(value == NULL)
-       return -ENOMEM;
-
-    if(copy_from_user((char *) value, (char*)(wrqu->data.pointer), cmd_len)) {
-            hddLog(VOS_TRACE_LEVEL_FATAL, "%s -- copy_from_user --data pointer failed! bailing",
-                 __FUNCTION__);
-         kfree(value);
-         return -EFAULT;
-     }
-     sub_cmd = value[0];
-     set_value = value[1];
-     kfree(value);
 
       INIT_COMPLETION(pWextState->completion_var);
     }
@@ -5942,32 +5914,6 @@ static int __iw_setint_getnone(struct net_device *dev,
 
            break;
         }
-        // Motorola, IKJBREL1-4181
-        case WE_SET_CHANNEL_RANGE:
-        {
-            int startChannel, endChannel;
-            if (set_value == 3) {
-                startChannel = 149;
-                endChannel   = 161;
-            } else if (set_value == 2) {
-                startChannel = 100;
-                endChannel   = 144;
-            } else if (set_value == 1) {
-                startChannel = 36;
-                endChannel   = 64;
-            } else {
-                set_value = 0;
-                startChannel = 1;
-                //BEGIN MOT a19110 IKJBXLINE-2149 MHS frequency band support
-                //Motorola jmng34 IKSWM-2195-Restrict mhs 2.4 ghz channels to FCC
-                endChannel   = 11;
-                //END IKJBXLINE-2149
-            }
-
-            ret = iw_softap_set_channel_range( dev, startChannel, endChannel, set_value);
-            break;
-        }
-       // End IKJBREL1-4181
 
         case WE_ENABLE_STRICT_FCC_REG:
         {
@@ -6736,13 +6682,6 @@ static int __iw_setnone_getint(struct net_device *dev,
            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO, ("concurrency mode=%d"),*value);
            break;
         }
-        // BEGIN MOTOROLA IKJB42MAIN-274, dpn473, 01/02/2013, Add flag to disable/enable MCC mode
-        case WE_GET_MCC_MODE:
-        {
-           *value = (int)hdd_get_mcc_mode();
-           break;
-        }
-        // IKJB42MAIN-274
 
         case WE_GET_SCAN_BAND_PREFERENCE:
         {
@@ -6832,13 +6771,6 @@ int __iw_set_three_ints_getnone(struct net_device *dev,
             ret = iw_softap_set_channel_range( dev, value[1], value[2], value[3]);
             break;
         }
-        //Begin Motorola dcw476 4/17/13 IKJBXLINE-5577:changing wlan driver log level dynamically
-        case WE_SET_WLAN_DBG_TILL_LEVEL:
-        {
-            vos_trace_setValue_till_level(value[1], value[2], value[3]);
-        }
-        break;
-        //END IKJBXLINE-5577
 
         default:
         {
@@ -9799,450 +9731,6 @@ static int iw_get_statistics(struct net_device *dev,
    return ret;
 }
 #ifdef FEATURE_WLAN_SCAN_PNO
-
-/*Max Len for PNO notification*/
-#define MAX_PNO_NOTIFY_LEN 100
-void found_pref_network_cb (void *callbackContext,
-                              tSirPrefNetworkFoundInd *pPrefNetworkFoundInd)
-{
-  hdd_adapter_t* pAdapter = (hdd_adapter_t*)callbackContext;
-  union iwreq_data wrqu;
-  char buf[MAX_PNO_NOTIFY_LEN+1];
-
-  hddLog(VOS_TRACE_LEVEL_WARN, "A preferred network was found: %s with rssi: -%d",
-         pPrefNetworkFoundInd->ssId.ssId, pPrefNetworkFoundInd->rssi);
-
-  // create the event
-  memset(&wrqu, 0, sizeof(wrqu));
-  memset(buf, 0, sizeof(buf));
-
-  snprintf(buf, MAX_PNO_NOTIFY_LEN, "QCOM: Found preferred network: %s with RSSI of -%u",
-           pPrefNetworkFoundInd->ssId.ssId,
-          (unsigned int)pPrefNetworkFoundInd->rssi);
-
-  wrqu.data.pointer = buf;
-  wrqu.data.length = strlen(buf);
-
-  // send the event
-
-  wireless_send_event(pAdapter->dev, IWEVCUSTOM, &wrqu, buf);
-
-}
-
-
-/*string based input*/
-VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
-                      union iwreq_data *wrqu, char *extra, int nOffset)
-{
-  hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
-  hdd_context_t *pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
-  /* pnoRequest is a large struct, so we make it static to avoid stack
-     overflow.  This API is only invoked via ioctl, so it is
-     serialized by the kernel rtnl_lock and hence does not need to be
-     reentrant */
-  tSirPNOScanReq pnoRequest = {0};
-  char *ptr, *data;
-  v_U8_t i,j, ucParams, ucMode;
-  size_t len;
-  eHalStatus status = eHAL_STATUS_FAILURE;
-  /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-  VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-            "PNO data len %d data %s",
-            wrqu->data.length,
-            extra);
-
-  if (wrqu->data.length <= nOffset )
-  {
-    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN, "PNO input is not correct");
-    return VOS_STATUS_E_FAILURE;
-  }
-
-  pnoRequest.enable = 0;
-  pnoRequest.ucNetworksCount = 0;
-  /*-----------------------------------------------------------------------
-    Input is string based and expected to be like this:
-
-    <enabled> <netw_count>
-    for each network:
-    <ssid_len> <ssid> <authentication> <encryption>
-    <ch_num> <channel_list optional> <bcast_type> <rssi_threshold>
-    <scan_timers> <scan_time> <scan_repeat> <scan_time> <scan_repeat>
-
-    e.g:
-    1 2 4 test 0 0 3 1 6 11 2 40 5 test2 4 4 6 1 2 3 4 5 6 1 0 2 5 2 300 0
-
-    this translates into:
-    -----------------------------
-    enable PNO
-    look for 2 networks:
-    test - with authentication type 0 and encryption type 0,
-    that can be found on 3 channels: 1 6 and 11 ,
-    SSID bcast type is unknown (directed probe will be sent if AP not found)
-    and must meet -40dBm RSSI
-
-    test2 - with auth and enrytption type 4/4
-    that can be found on 6 channels 1, 2, 3, 4, 5 and 6
-    bcast type is non-bcast (directed probe will be sent)
-    and must not meet any RSSI threshold
-
-    scan every 5 seconds 2 times, scan every 300 seconds until stopped
-  -----------------------------------------------------------------------*/
-
-  /* making sure argument string ends with '\0' */
-  len = (wrqu->data.length-nOffset) + 1;
-  data = vos_mem_malloc(len);
-  if (NULL == data) {
-      VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                FL("fail to allocate memory %zu"), len);
-      return -EINVAL;
-  }
-  vos_mem_zero(data, len);
-  vos_mem_copy(data, &extra[nOffset], (len-1));
-  ptr = data;
-
-  if (1 != sscanf(ptr," %hhu%n", &(pnoRequest.enable), &nOffset))
-  {
-      VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                "PNO enable input is not valid %s",ptr);
-      vos_mem_free(data);
-      return VOS_STATUS_E_FAILURE;
-  }
-
-  if ( 0 == pnoRequest.enable )
-  {
-    /*Disable PNO*/
-    memset(&pnoRequest, 0, sizeof(pnoRequest));
-    status = sme_SetPreferredNetworkList(WLAN_HDD_GET_HAL_CTX(pAdapter),
-                                &pnoRequest,
-                                pAdapter->sessionId,
-                                found_pref_network_cb, pAdapter);
-    if (eHAL_STATUS_SUCCESS != status)
-    {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-                  "%s: failed to disable PNO", __func__);
-        vos_mem_free(data);
-        return VOS_STATUS_E_FAILURE;
-    }
-    pHddCtx->isPnoEnable = FALSE;
-    vos_mem_free(data);
-    return VOS_STATUS_SUCCESS;
-  }
-
-  if (TRUE == pHddCtx->isPnoEnable)
-  {
-     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN,
-               FL("already PNO is enabled"));
-     vos_mem_free(data);
-     return -EBUSY;
-  }
-  pHddCtx->isPnoEnable = TRUE;
-
-  ptr += nOffset;
-
-  if (1 != sscanf(ptr," %hhu %n", &(pnoRequest.ucNetworksCount), &nOffset))
-  {
-      VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                "PNO count input not valid %s",ptr);
-      goto error;
-  }
-
-  VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-            "PNO enable %d networks count %d offset %d",
-            pnoRequest.enable,
-            pnoRequest.ucNetworksCount,
-            nOffset);
-
-  /* Parameters checking:
-      ucNetworksCount has to be larger than 0*/
-  if (( 0 == pnoRequest.ucNetworksCount ) ||
-      ( pnoRequest.ucNetworksCount > SIR_PNO_MAX_SUPP_NETWORKS ))
-  {
-      VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN, "Network input is not correct");
-      goto error;
-  }
-
-  ptr += nOffset;
-
-  pnoRequest.aNetworks =
-           vos_mem_malloc(sizeof(tSirNetworkType)*pnoRequest.ucNetworksCount);
-  if (pnoRequest.aNetworks == NULL)
-  {
-       VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
-           FL("failed to allocate memory aNetworks %u"),
-               (uint32)sizeof(tSirNetworkType)*pnoRequest.ucNetworksCount);
-       goto error;
-  }
-  vos_mem_zero(pnoRequest.aNetworks,
-               sizeof(tSirNetworkType)*pnoRequest.ucNetworksCount);
-
-  for ( i = 0; i < pnoRequest.ucNetworksCount; i++ )
-  {
-
-    pnoRequest.aNetworks[i].ssId.length = 0;
-
-    ucParams = sscanf(ptr," %hhu %n",
-                      &(pnoRequest.aNetworks[i].ssId.length),&nOffset);
-
-    if (1 != ucParams)
-    {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                  "PNO ssid length input is not valid %s",ptr);
-        goto error;
-    }
-
-    if (( 0 == pnoRequest.aNetworks[i].ssId.length ) ||
-        ( pnoRequest.aNetworks[i].ssId.length > 32 ) )
-    {
-      VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                "SSID Len %d is not correct for network %d",
-                pnoRequest.aNetworks[i].ssId.length, i);
-      goto error;
-    }
-
-    /*Advance to SSID*/
-    ptr += nOffset;
-
-    memcpy(pnoRequest.aNetworks[i].ssId.ssId, ptr,
-           pnoRequest.aNetworks[i].ssId.length);
-    ptr += pnoRequest.aNetworks[i].ssId.length;
-
-    ucParams = sscanf(ptr," %u %u %hhu %n",
-                      &(pnoRequest.aNetworks[i].authentication),
-                      &(pnoRequest.aNetworks[i].encryption),
-                      &(pnoRequest.aNetworks[i].ucChannelCount),
-                      &nOffset);
-
-    if ( 3 != ucParams )
-    {
-      VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN,
-                "Incorrect cmd %s",ptr);
-      goto error;
-    }
-
-    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-              "PNO len %d ssid 0x%08x%08x%08x%08x%08x%08x%08x%08x"
-              "auth %d encry %d channel count %d offset %d",
-              pnoRequest.aNetworks[i].ssId.length,
-              *((v_U32_t *) &pnoRequest.aNetworks[i].ssId.ssId[0]),
-              *((v_U32_t *) &pnoRequest.aNetworks[i].ssId.ssId[4]),
-              *((v_U32_t *) &pnoRequest.aNetworks[i].ssId.ssId[8]),
-              *((v_U32_t *) &pnoRequest.aNetworks[i].ssId.ssId[12]),
-              *((v_U32_t *) &pnoRequest.aNetworks[i].ssId.ssId[16]),
-              *((v_U32_t *) &pnoRequest.aNetworks[i].ssId.ssId[20]),
-              *((v_U32_t *) &pnoRequest.aNetworks[i].ssId.ssId[24]),
-              *((v_U32_t *) &pnoRequest.aNetworks[i].ssId.ssId[28]),
-              pnoRequest.aNetworks[i].authentication,
-              pnoRequest.aNetworks[i].encryption,
-              pnoRequest.aNetworks[i].ucChannelCount,
-              nOffset );
-
-    /*Advance to channel list*/
-    ptr += nOffset;
-
-    if (SIR_PNO_MAX_NETW_CHANNELS < pnoRequest.aNetworks[i].ucChannelCount)
-    {
-      VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_WARN,
-                "Incorrect number of channels");
-      goto error;
-    }
-
-    if ( 0 !=  pnoRequest.aNetworks[i].ucChannelCount)
-    {
-      for ( j = 0; j < pnoRequest.aNetworks[i].ucChannelCount; j++)
-      {
-           if (1 != sscanf(ptr," %hhu %n",
-                           &(pnoRequest.aNetworks[i].aChannels[j]),
-                           &nOffset))
-            {    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                           "PNO network channel input is not valid %s",ptr);
-                 goto error;
-            }
-            if (!IS_CHANNEL_VALID(pnoRequest.aNetworks[i].aChannels[j])) {
-                VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                          FL("invalid channel: %hhu"),
-                             pnoRequest.aNetworks[i].aChannels[j]);
-                goto error;
-            }
-
-            /*Advance to next channel number*/
-            ptr += nOffset;
-      }
-    }
-
-    if (1 != sscanf(ptr," %u %n",
-                    &(pnoRequest.aNetworks[i].bcastNetwType),
-                    &nOffset))
-    {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                  "PNO broadcast network type input is not valid %s",ptr);
-        goto error;
-    }
-    if (pnoRequest.aNetworks[i].bcastNetwType > 2) {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                  FL("invalid bcast nw type: %u"),
-                      pnoRequest.aNetworks[i].bcastNetwType);
-         goto error;
-    }
-
-    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-            "PNO bcastNetwType %d offset %d",
-            pnoRequest.aNetworks[i].bcastNetwType,
-            nOffset );
-
-    /*Advance to rssi Threshold*/
-    ptr += nOffset;
-
-    if (1 != sscanf(ptr," %hhu %n",
-                    &(pnoRequest.aNetworks[i].rssiThreshold),
-                    &nOffset))
-    {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                  "PNO rssi threshold input is not valid %s",ptr);
-        goto error;
-    }
-
-    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-            "PNO rssi %d offset %d",
-            pnoRequest.aNetworks[i].rssiThreshold,
-            nOffset );
-    /*Advance to next network*/
-    ptr += nOffset;
-  }/*For ucNetworkCount*/
-
-  ucParams = sscanf(ptr," %hhu %n",
-                    &(pnoRequest.scanTimers.ucScanTimersCount),
-                    &nOffset);
-
-  /*Read the scan timers*/
-  if (( 1 == ucParams ) && ( pnoRequest.scanTimers.ucScanTimersCount > 0 ))
-  {
-     ptr += nOffset;
-
-     VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-        "Scan timer count %d offset %d",
-        pnoRequest.scanTimers.ucScanTimersCount,
-        nOffset );
-
-     if ( SIR_PNO_MAX_SCAN_TIMERS < pnoRequest.scanTimers.ucScanTimersCount )
-     {
-       VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                    "Incorrect cmd - too many scan timers");
-       goto error;
-     }
-
-     for ( i = 0; i < pnoRequest.scanTimers.ucScanTimersCount; i++ )
-     {
-        ucParams = sscanf(ptr," %u %u %n",
-           &(pnoRequest.scanTimers.aTimerValues[i].uTimerValue),
-           &( pnoRequest.scanTimers.aTimerValues[i].uTimerRepeat),
-           &nOffset);
-
-        if (2 != ucParams)
-        {
-            VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                    "Incorrect cmd - diff params then expected %d", ucParams);
-            goto error;
-        }
-
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-            "PNO Timer value %d Timer repeat %d offset %d",
-            pnoRequest.scanTimers.aTimerValues[i].uTimerValue,
-            pnoRequest.scanTimers.aTimerValues[i].uTimerRepeat,
-            nOffset );
-
-        ptr += nOffset;
-     }
-
-  }
-  else
-  {
-    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-       "No scan timers provided param count %d scan timers %d",
-        ucParams,  pnoRequest.scanTimers.ucScanTimersCount );
-
-    /*Scan timers defaults to 5 minutes*/
-    pnoRequest.scanTimers.ucScanTimersCount = 1;
-    pnoRequest.scanTimers.aTimerValues[0].uTimerValue  = 60;
-    pnoRequest.scanTimers.aTimerValues[0].uTimerRepeat = 0;
-  }
-
-  ucParams = sscanf(ptr," %hhu %n",&(ucMode), &nOffset);
-
-  pnoRequest.modePNO = ucMode;
-  /*for LA we just expose suspend option*/
-  if (( 1 != ucParams )||(  ucMode >= SIR_PNO_MODE_MAX ))
-  {
-     pnoRequest.modePNO = SIR_PNO_MODE_ON_SUSPEND;
-  }
-  pnoRequest.p24GProbeTemplate = vos_mem_malloc(SIR_PNO_MAX_PB_REQ_SIZE);
-  if (pnoRequest.p24GProbeTemplate == NULL){
-      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
-          FL("failed to allocate memory p24GProbeTemplate %u"),
-              SIR_PNO_MAX_PB_REQ_SIZE);
-      goto error;
-  }
-
-  pnoRequest.p5GProbeTemplate = vos_mem_malloc(SIR_PNO_MAX_PB_REQ_SIZE);
-  if (pnoRequest.p5GProbeTemplate == NULL){
-      VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
-          FL("failed to allocate memory p5GProbeTemplate %u"),
-              SIR_PNO_MAX_PB_REQ_SIZE);
-      goto error;
-  }
-
-  vos_mem_zero(pnoRequest.p24GProbeTemplate, SIR_PNO_MAX_PB_REQ_SIZE);
-  vos_mem_zero(pnoRequest.p5GProbeTemplate, SIR_PNO_MAX_PB_REQ_SIZE);
-
-  // IKHSS7-5797: set PNO intervals
-  /* A set value represents the amount of time that PNO will wait between
-     two consecutive scan procedures.
-     If the desired is for a uniform timer that fires always at the exact same
-     interval - one single value is to be set
-
-     If there is a desire for a more complex - telescopic like timer multiple
-     values can be set - once PNO reaches the end of the array it will
-     continue scanning at intervals presented by the last value
-
-     uTimerRepeat
-     How many times it should repeat that wait value
-     0 - keep using this timer until PNO is disabled/
-     e.g:   2 3
-            4 0
-    - it will wait 2s between consecutive scans for 3 times
-    - after that it will wait 4s between consecutive scans until disabled
-  */
-  pnoRequest.scanTimers.ucScanTimersCount = 2;
-  pnoRequest.scanTimers.aTimerValues[0].uTimerRepeat = 7;
-  pnoRequest.scanTimers.aTimerValues[0].uTimerValue = 45;
-  pnoRequest.scanTimers.aTimerValues[1].uTimerRepeat = 0;
-  pnoRequest.scanTimers.aTimerValues[1].uTimerValue = 480;
-
-  status = sme_SetPreferredNetworkList(WLAN_HDD_GET_HAL_CTX(pAdapter), &pnoRequest,
-                                pAdapter->sessionId,
-                                found_pref_network_cb, pAdapter);
-  if (eHAL_STATUS_SUCCESS == status)
-  {
-      VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-                  "%s: PNO enabled", __func__);
-      vos_mem_free(data);
-      return VOS_STATUS_SUCCESS;
-  }
-error:
-    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                "%s: Failed to enable PNO", __func__);
-    pHddCtx->isPnoEnable = FALSE;
-    if (pnoRequest.aNetworks)
-        vos_mem_free(pnoRequest.aNetworks);
-    if (pnoRequest.p24GProbeTemplate)
-        vos_mem_free(pnoRequest.p24GProbeTemplate);
-    if (pnoRequest.p5GProbeTemplate)
-        vos_mem_free(pnoRequest.p5GProbeTemplate);
-
-    vos_mem_free(data);
-    return VOS_STATUS_E_FAILURE;
-}/*iw_set_pno*/
-
 VOS_STATUS iw_set_rssi_filter(struct net_device *dev, struct iw_request_info *info,
         union iwreq_data *wrqu, char *extra, int nOffset)
 {
@@ -10262,55 +9750,6 @@ VOS_STATUS iw_set_rssi_filter(struct net_device *dev, struct iw_request_info *in
 
     sme_SetRSSIFilter(WLAN_HDD_GET_HAL_CTX(pAdapter), rssiThreshold);
     return VOS_STATUS_SUCCESS;
-}
-
-
-static int __iw_set_pno_priv(struct net_device *dev,
-                           struct iw_request_info *info,
-                           union iwreq_data *wrqu, char *extra)
-{
-    hdd_adapter_t *pAdapter;
-    hdd_context_t *pHddCtx;
-    int ret = 0;
-    VOS_STATUS status;
-
-    ENTER();
-    pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
-    if (NULL == pAdapter)
-    {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                  "%s: Adapter is NULL",__func__);
-        return -EINVAL;
-    }
-
-    pHddCtx = WLAN_HDD_GET_CTX(pAdapter);
-    ret = wlan_hdd_validate_context(pHddCtx);
-    if (0 != ret)
-    {
-        return ret;
-    }
-
-
-    VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_INFO,
-                "Set PNO Private");
-
-    status = iw_set_pno(dev,info,wrqu,extra,0);
-
-    EXIT();
-    return status;
-}
-
-static int iw_set_pno_priv(struct net_device *dev,
-                           struct iw_request_info *info,
-                           union iwreq_data *wrqu, char *extra)
-{
-    int ret;
-
-    vos_ssr_protect(__func__);
-    ret = __iw_set_pno_priv(dev, info, wrqu, extra);
-    vos_ssr_unprotect(__func__);
-
-    return ret;
 }
 #endif /*FEATURE_WLAN_SCAN_PNO*/
 
@@ -10454,7 +9893,7 @@ int hdd_setBand(struct net_device *dev, u8 ui_band)
              if(curr_country[0] == '0' && curr_country[1] == '0')
                      regulatory_hint_user("IN", NL80211_USER_REG_HINT_USER);
              else
-                     regulatory_hint_user("OO", NL80211_USER_REG_HINT_USER);
+                     regulatory_hint_user("00", NL80211_USER_REG_HINT_USER);
 #else
              if(curr_country[0] == '0' && curr_country[1] == '0')
                      regulatory_hint_user("IN");
@@ -11104,10 +10543,6 @@ static const iw_handler we_private[] = {
    ,
    [WLAN_SET_PACKET_FILTER_PARAMS       - SIOCIWFIRSTPRIV]   = iw_set_packet_filter_params
 #endif
-#ifdef FEATURE_WLAN_SCAN_PNO
-   ,
-   [WLAN_SET_PNO                        - SIOCIWFIRSTPRIV]   = iw_set_pno_priv
-#endif
    ,
    [WLAN_SET_BAND_CONFIG                - SIOCIWFIRSTPRIV]   = iw_set_band_config,
    [WLAN_PRIV_SET_MCBC_FILTER           - SIOCIWFIRSTPRIV]   = iw_set_dynamic_mcbc_filter,
@@ -11209,11 +10644,6 @@ static const struct iw_priv_args we_private_args[] = {
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
         0,
         "setTmLevel" },
-
-    {   WE_SET_CHANNEL_RANGE,
-        IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
-        0,
-        "setChannelRange" },
 
     {   WE_ENABLE_STRICT_FCC_REG,
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
@@ -11331,12 +10761,6 @@ static const struct iw_priv_args we_private_args[] = {
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
         "getconcurrency" },
 
-    /* MOTOROLA IKJB42MAIN-274 */
-    {   WE_GET_MCC_MODE,
-        0,
-        IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
-        "getMccMode" },
-
     {   WE_GET_SCAN_BAND_PREFERENCE,
         0,
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
@@ -11408,13 +10832,6 @@ static const struct iw_priv_args we_private_args[] = {
         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 3,
         0,
         "setsapchannels" },
-
-   //Begin Motorola dcw476 4/17/13 IKJBXLINE-5577:changing wlan driver log level dynamically
-   {    WE_SET_WLAN_DBG_TILL_LEVEL,
-         IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 3,
-         0,
-         "setwlanloglevel" },
-   //END IKJBXLINE-5577
 
     /* handlers for main ioctl */
     {   WLAN_PRIV_GET_CHAR_SET_NONE,

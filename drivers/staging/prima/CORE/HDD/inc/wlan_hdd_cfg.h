@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -60,6 +60,12 @@
 /* 802.11 pre-share key length */
 #define WLAN_PSK_STRING_LENGTH   (64)
 #endif /* SAP_AUTH_OFFLOAD */
+
+/*
+ * Maximum length of the default SAP interface created using
+ * gEnabledefaultSAP ini param.
+ */
+#define CFG_CONCURRENT_IFACE_MAX_LEN 16
 
 // Defines for all of the things we read from the configuration (registry).
 
@@ -3248,6 +3254,46 @@ This feature requires the dependent cfg.ini "gRoamPrefer5GHz" set to 1 */
 #define CFG_FORCE_RSNE_OVERRIDE_MAX     (1)
 #define CFG_FORCE_RSNE_OVERRIDE_DEFAULT (0)
 
+/*
+ * <ini>
+ * gEnabledefaultSAP - This will control the creation of default SAP
+ * interface
+ * @Default: NULL
+ *
+ * This ini is used for providing control to create a default SAP session
+ * along with the creation of wlan0 and p2p0. The name of the interface is
+ * specified as the parameter
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_DEFAULT_SAP           "gEnabledefaultSAP"
+#define CFG_ENABLE_DEFAULT_SAP_DEFAULT   ""
+
+/*
+ * <ini>
+ * sae_enabled - Enable/Disable SAE support in driver
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This ini is used to enable/disable SAE support in driver
+ * Driver will update config to supplicant based on this config.
+ *
+ * Related: None
+ *
+ * Supported Feature: SAE
+ * Usage: External
+ *
+ * </ini>
+ */
+
+#define CFG_IS_SAE_ENABLED_NAME    "sae_enabled"
+#define CFG_IS_SAE_ENABLED_DEFAULT (1)
+#define CFG_IS_SAE_ENABLED_MIN     (0)
+#define CFG_IS_SAE_ENABLED_MAX     (1)
+
 /*--------------------------------------------------------------------------- 
   Type declarations
   -------------------------------------------------------------------------*/ 
@@ -3864,7 +3910,10 @@ typedef struct
    uint32_t                    btc_dyn_num_bt_ext;
    bool                        indoor_channel_support;
    bool                        force_rsne_override;
-
+   char enabledefaultSAP[CFG_CONCURRENT_IFACE_MAX_LEN];
+#ifdef WLAN_FEATURE_SAE
+   bool                        is_sae_enabled;
+#endif
 } hdd_config_t;
 
 /*--------------------------------------------------------------------------- 

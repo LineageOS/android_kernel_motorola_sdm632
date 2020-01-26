@@ -157,7 +157,6 @@ safeChannelType safeChannels[NUM_20MHZ_RF_CHANNELS] =
 };
 #endif /* FEATURE_WLAN_CH_AVOID */
 
-#define MIN_MTU_SIZE 256     // Motorola, IKHSS7-19443, A21623, Hotspot MTU changes
 /*---------------------------------------------------------------------------
  *   Function definitions
  *-------------------------------------------------------------------------*/
@@ -326,12 +325,6 @@ int hdd_hostapd_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 int __hdd_hostapd_change_mtu(struct net_device *dev, int new_mtu)
 {
-//  Motorola, IKHSS7-19443, A21623, Hotspot MTU changes
-    if ( (new_mtu  < MIN_MTU_SIZE)  || (new_mtu > IEEE80211_MAX_DATA_LEN - 26) )
-        return EINVAL;
-
-    dev->mtu = new_mtu;
-//  End IKHSS7-19443
     return 0;
 }
 
@@ -1504,6 +1497,8 @@ VOS_STATUS hdd_hostapd_SAPEventCB( tpSap_Event pSapEvent, v_PVOID_t usrDataForCa
             memcpy(wrqu.addr.sa_data, &pSapEvent->sapevt.sapStationDisassocCompleteEvent.staMac,
                    sizeof(v_MACADDR_t));
             hddLog(LOG1, " disassociated "MAC_ADDRESS_STR, MAC_ADDR_ARRAY(wrqu.addr.sa_data));
+
+            vos_status = vos_event_set(&pHostapdState->sta_discon_event);
             if (pSapEvent->sapevt.sapStationDisassocCompleteEvent.reason == eSAP_USR_INITATED_DISASSOC)
                 hddLog(LOG1," User initiated disassociation");
             else
@@ -1618,14 +1613,15 @@ VOS_STATUS hdd_hostapd_SAPEventCB( tpSap_Event pSapEvent, v_PVOID_t usrDataForCa
             break;
 
         case eSAP_MAX_ASSOC_EXCEEDED:
-            /* Beging Motorola IKHSS7-18970 fpx478, 30/03/2012, nottification to MHS */
-            /* Redefining the Custom Message
-             * IW_CUSTOM_MAX will inform when STA is denied when assoc due to Maximum Mobile
-             * Hotspot connections reached. Please disconnect one or more devices to enable
-             * the new device connection, and we dont require the MAC address of the STA
-             */
-            snprintf(maxAssocExceededEvent, IW_CUSTOM_MAX, "eSAP_MAX_ASSOC_EXCEEDED");
-            /* END IKHSS7-18970 */
+            snprintf(maxAssocExceededEvent, IW_CUSTOM_MAX, "Peer %02x:%02x:%02x:%02x:%02x:%02x denied"
+                    " assoc due to Maximum Mobile Hotspot connections reached. Please disconnect"
+                    " one or more devices to enable the new device connection",
+                    pSapEvent->sapevt.sapMaxAssocExceeded.macaddr.bytes[0],
+                    pSapEvent->sapevt.sapMaxAssocExceeded.macaddr.bytes[1],
+                    pSapEvent->sapevt.sapMaxAssocExceeded.macaddr.bytes[2],
+                    pSapEvent->sapevt.sapMaxAssocExceeded.macaddr.bytes[3],
+                    pSapEvent->sapevt.sapMaxAssocExceeded.macaddr.bytes[4],
+                    pSapEvent->sapevt.sapMaxAssocExceeded.macaddr.bytes[5]);
             we_event = IWEVCUSTOM; /* Discovered a new node (AP mode). */
             wrqu.data.pointer = maxAssocExceededEvent;
             wrqu.data.length = strlen(maxAssocExceededEvent);
@@ -2425,35 +2421,15 @@ static __iw_softap_setparam(struct net_device *dev,
     hdd_adapter_t *pHostapdAdapter = (netdev_priv(dev));
     tHalHandle hHal;
     hdd_context_t *pHddCtx = NULL;
-    //BEGIN MOT IKSWO-9634, gambugge, Use copy_from_user to get user space data
-    uint8_t *mot_value;
-    int sub_cmd;
-    int set_value;
-    //END IKSWO-9634
+    int *value = (int *)extra;
+    int sub_cmd = value[0];
+    int set_value = value[1];
     eHalStatus status;
     int ret = 0; /* success */
     int enable_pattrn_byte_match, enable_magic_pkt;
     v_CONTEXT_t pVosContext;
 
     ENTER();
-
-    //BEGIN MOT IKSWO-9634, gambugge, Use copy_from_user to get user space data
-    mot_value = (uint8_t*)kmalloc(wrqu->data.length+1, GFP_KERNEL);
-
-    if (NULL == mot_value)
-        return -ENOMEM;
-
-    if(copy_from_user((uint8_t *)mot_value, (uint8_t *)(wrqu->data.pointer), wrqu->data.length)) {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                    "%s -- copy from user -- data pointer failed! bailing", __func__);
-        kfree(mot_value);
-        return -EFAULT;
-    }
-
-    sub_cmd = (int )(*(mot_value + 0));
-    set_value = (int)(*(mot_value + 1));
-    kfree(mot_value);
-    //END IKSWO-9634
 
     if (NULL == pHostapdAdapter)
     {
@@ -2961,7 +2937,7 @@ int __iw_softap_modify_acl(struct net_device *dev,
     hdd_adapter_t *pHostapdAdapter;
     v_CONTEXT_t pVosContext;
     hdd_context_t *pHddCtx;
-    uint8_t *value; // MOT IKSWO-29193
+    v_BYTE_t *value = (v_BYTE_t*)extra;
     v_U8_t pPeerStaMac[VOS_MAC_ADDR_SIZE];
     int listType, cmd, i;
     int ret = 0; /* success */
@@ -2987,17 +2963,6 @@ int __iw_softap_modify_acl(struct net_device *dev,
                  "%s: Vos Context is NULL",__func__);
         return -EINVAL;
     }
-    //BEGIN MOT IKSWO-29193
-    value = (uint8_t *) kmalloc(wrqu->data.length+1, GFP_KERNEL);
-    if(copy_from_user((uint8_t *) value, (uint8_t *)(wrqu->data.pointer), wrqu->data.length)) {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                 "%s -- copy_from_user --data pointer failed! bailing",
-                 __func__);
-        kfree(value);
-        return -EFAULT;
-    }
-    //END MOT IKSWO-29193
-
     for (i=0; i<VOS_MAC_ADDR_SIZE; i++)
     {
         pPeerStaMac[i] = *(value+i);
@@ -3005,7 +2970,6 @@ int __iw_softap_modify_acl(struct net_device *dev,
     listType = (int)(*(value+i));
     i++;
     cmd = (int)(*(value+i));
-    kfree(value);//MOT IKSWO-29193
 
     hddLog(LOG1, "%s: SAP Modify ACL arg0 " MAC_ADDRESS_STR " arg1 %d arg2 %d",
             __func__, MAC_ADDR_ARRAY(pPeerStaMac), listType, cmd);
@@ -3090,9 +3054,8 @@ static __iw_softap_set_max_tx_power(struct net_device *dev,
     hdd_adapter_t *pHostapdAdapter;
     tHalHandle hHal;
     hdd_context_t *pHddCtx;
+    int *value = (int *)extra;
     int set_value, ret = 0;
-    int cmd_len = wrqu->data.length;
-    int *value = (int *)kmalloc(cmd_len+1, GFP_KERNEL);
     tSirMacAddr bssid = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
     tSirMacAddr selfMac = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
@@ -3120,12 +3083,6 @@ static __iw_softap_set_max_tx_power(struct net_device *dev,
     }
     if (NULL == value)
         return -ENOMEM;
-    if(copy_from_user((char *) value, (char*)(wrqu->data.pointer), cmd_len)) {
-        hddLog(VOS_TRACE_LEVEL_FATAL, "%s -- copy_from_user --data pointer failed! bailing",
-                __func__);
-        kfree(value);
-        return -EFAULT;
-    }
 
     /* Assign correct slef MAC address */
     vos_mem_copy(bssid, pHostapdAdapter->macAddressCurrent.bytes,
@@ -3134,7 +3091,6 @@ static __iw_softap_set_max_tx_power(struct net_device *dev,
                  VOS_MAC_ADDR_SIZE);
 
     set_value = value[0];
-    kfree(value);
     if (eHAL_STATUS_SUCCESS != sme_SetMaxTxPower(hHal, bssid, selfMac, set_value))
     {
         hddLog(VOS_TRACE_LEVEL_ERROR, "%s: Setting maximum tx power failed",
@@ -3308,7 +3264,7 @@ static int __iw_softap_set_trafficmonitor(struct net_device *dev,
                                           union iwreq_data *wrqu, char *extra)
 {
     hdd_adapter_t *pAdapter;
-    uint8_t *isSetTrafficMon; //IKSWO-89381
+    int *isSetTrafficMon = (int *)extra;
     hdd_context_t *pHddCtx;
     int status;
 
@@ -3332,16 +3288,12 @@ static int __iw_softap_set_trafficmonitor(struct net_device *dev,
 
     hddLog(VOS_TRACE_LEVEL_INFO, "%s : ", __func__);
 
-    //BEGIN MOT IKSWO-89381
-    isSetTrafficMon = (uint8_t *) kmalloc(wrqu->data.length+1, GFP_KERNEL);
-    if(copy_from_user((uint8_t *) isSetTrafficMon, (uint8_t *)(wrqu->data.pointer), wrqu->data.length)) {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                 "%s -- copy_from_user --data pointer failed! bailing",
-                 __func__);
-        kfree(isSetTrafficMon);
-        return -EFAULT;
+    if (NULL == isSetTrafficMon)
+    {
+        VOS_TRACE(VOS_MODULE_ID_SAP, VOS_TRACE_LEVEL_ERROR,
+                   "%s: Invalid SAP pointer from extra", __func__);
+        return -ENOMEM;
     }
-    //END MOT IKSWO-89381
 
     if (TRUE == *isSetTrafficMon)
     {
@@ -3350,7 +3302,6 @@ static int __iw_softap_set_trafficmonitor(struct net_device *dev,
         {
             VOS_TRACE( VOS_MODULE_ID_HDD_SOFTAP, VOS_TRACE_LEVEL_ERROR,
                        "%s: failed to Start Traffic Monitor timer ", __func__ );
-            kfree(isSetTrafficMon); //IKSWO-89381
             return -EIO;
         }
     }
@@ -3361,13 +3312,11 @@ static int __iw_softap_set_trafficmonitor(struct net_device *dev,
         {
             VOS_TRACE( VOS_MODULE_ID_HDD_SOFTAP, VOS_TRACE_LEVEL_ERROR,
                        "%s: failed to Stop Traffic Monitor timer ", __func__ );
-            kfree(isSetTrafficMon); //IKSWO-89381
             return -EIO;
         }
 
     }
 
-    kfree(isSetTrafficMon); //IKSWO-89381
     EXIT();
     return 0;
 }
@@ -3520,7 +3469,7 @@ static __iw_softap_disassoc_sta(struct net_device *dev,
 {
     hdd_adapter_t *pHostapdAdapter;
     hdd_context_t *pHddCtx;
-    uint8_t *peerMacAddr; //MOT IKSWO-29193
+    v_U8_t *peerMacAddr;
     int ret = 0;
 
     ENTER();
@@ -3547,21 +3496,11 @@ static __iw_softap_disassoc_sta(struct net_device *dev,
     /* iwpriv tool or framework calls this ioctl with
      * data passed in extra (less than 16 octets);
      */
-    //START MOT IKSWO-29193
-    peerMacAddr = (uint8_t *)kmalloc(wrqu->data.length+1, GFP_KERNEL);
-    if(copy_from_user((uint8_t *) peerMacAddr, (uint8_t *)(wrqu->data.pointer), wrqu->data.length)) {
-        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
-                 "%s -- copy_from_user --data pointer failed! bailing",
-                 __func__);
-        kfree(peerMacAddr);
-        return -EFAULT;
-    }
-    //END MOT IKSWO-29193
+    peerMacAddr = (v_U8_t *)(extra);
 
     hddLog(LOG1, "%s data "  MAC_ADDRESS_STR,
            __func__, MAC_ADDR_ARRAY(peerMacAddr));
     hdd_softap_sta_disassoc(pHostapdAdapter, peerMacAddr);
-    kfree(peerMacAddr); //MOT IKSWO-29193
     EXIT();
     return 0;
 }
@@ -4018,6 +3957,7 @@ int __iw_softap_get_channel_list(struct net_device *dev,
         hddLog(LOGE,FL("Failed to get Domain ID, %d"),domainIdCurrentSoftap);
         return -EIO;
     }
+
     if(REGDOMAIN_FCC == domainIdCurrentSoftap &&
              pHddCtx->cfg_ini->gEnableStrictRegulatoryForFCC )
     {
@@ -5597,6 +5537,12 @@ VOS_STATUS hdd_init_ap_mode( hdd_adapter_t *pAdapter, bool re_init)
     {
          VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, ("ERROR: Hostapd HDD vos event init failed!!"));
          return status;
+    }
+    status = vos_event_init(&phostapdBuf->sta_discon_event);
+    if (!VOS_IS_STATUS_SUCCESS(status))
+    {
+        VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR, "ERROR: Hostapd HDD sta disassoc event init failed!!");
+        return status;
     }
 #ifdef DHCP_SERVER_OFFLOAD
     status = vos_event_init(&dhcp_status->vos_event);

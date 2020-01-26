@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2015, 2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -46,6 +46,8 @@
 #include "vos_status.h"
 #include "wlan_nv.h"
 #include "wlan_nv2.h"
+
+extern bool init_by_reg_core_user;
 
 /* Maximum number of channels per country can be ignored */
 #define MAX_CHANNELS_IGNORE 10
@@ -815,20 +817,6 @@ void vos_getCurrentCountryCode
    tANI_U8 *cc
 );
 #endif
-
-//BEGIN IKSWO-79967, add function to check if current country need disable MHS 5G Band1
-/**------------------------------------------------------------------------
-  \brief vos_IsDisableB1Countrycode -
-  \param   countrycode
-  \return TRUE if country need disable MHS Band 1
-  \sa
-  -------------------------------------------------------------------------*/
-
-v_BOOL_t vos_IsDisableMhsBand1CountryCode
-(
-   tANI_U8 *cc
-);
-//END IKSWO-79967
 
 int vos_update_nv_table_from_wiphy_band(void *hdd_ctx,
                                          void *wiphy,v_U8_t nBandCapability);

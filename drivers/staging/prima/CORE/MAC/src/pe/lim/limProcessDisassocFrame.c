@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, 2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -80,12 +80,16 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
     tpSirMacMgmtHdr    pHdr;
     tpDphHashNode      pStaDs;
     tLimMlmDisassocInd mlmDisassocInd;
-#ifdef WLAN_FEATURE_11W
-    tANI_U32            frameLen;
-#endif
+    tANI_U32            frame_len;
 
     pHdr = WDA_GET_RX_MAC_HEADER(pRxPacketInfo);
     pBody = WDA_GET_RX_MPDU_DATA(pRxPacketInfo);
+    frame_len = WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo);
+
+    if (frame_len < 2) {
+        limLog(pMac, LOGE, FL("frame len less than 2"));
+        return;
+    }
 
     if (limIsGroupAddr(pHdr->sa))
     {
@@ -124,10 +128,9 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
         PELOGE(limLog(pMac, LOG1, FL("received an unprotected disassoc from AP"));)
         // If the frame received is unprotected, forward it to the supplicant to initiate
         // an SA query
-        frameLen = WDA_GET_RX_PAYLOAD_LEN(pRxPacketInfo);
         //send the unprotected frame indication to SME
         limSendSmeUnprotectedMgmtFrameInd( pMac, pHdr->fc.subType,
-                                           (tANI_U8*)pHdr, (frameLen + sizeof(tSirMacMgmtHdr)),
+                                           (tANI_U8*)pHdr, (frame_len + sizeof(tSirMacMgmtHdr)),
                                            psessionEntry->smeSessionId, psessionEntry);
         return;
     }
@@ -203,6 +206,14 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
         }
     }
 
+    if ((psessionEntry->limSystemRole == eLIM_STA_ROLE) &&
+         psessionEntry->limMlmState == eLIM_MLM_WT_ADD_STA_RSP_STATE) {
+        PELOGE(limLog(pMac, LOGE, FL("received Disassoc from the AP in"
+                      "add sta response state, disconnecting"));)
+        psessionEntry->fDeauthReceived = true;
+        return;
+      }
+
     if ( (psessionEntry->limSystemRole == eLIM_AP_ROLE) ||
          (psessionEntry->limSystemRole == eLIM_BT_AMP_AP_ROLE) )
     {
@@ -235,10 +246,6 @@ limProcessDisassocFrame(tpAniSirGlobal pMac, tANI_U8 *pRxPacketInfo, tpPESession
                 (psessionEntry->limSmeState != eLIM_SME_WT_ASSOC_STATE)  &&
                 (psessionEntry->limSmeState != eLIM_SME_WT_REASSOC_STATE) ))
     {
-        PELOGE(limLog(pMac, LOGE,
-               FL("received Disassoc with reason code= %d disassoc frame rssi = "
-                "%d from "MAC_ADDRESS_STR), reasonCode,
-                (uint)abs((tANI_S8)WDA_GET_RX_RSSI_DB(pRxPacketInfo)),MAC_ADDR_ARRAY(pHdr->sa));)
         switch (reasonCode)
         {
             case eSIR_MAC_UNSPEC_FAILURE_REASON:

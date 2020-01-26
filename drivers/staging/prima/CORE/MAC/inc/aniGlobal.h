@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, 2017-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2017-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -244,6 +244,8 @@ typedef struct sLimTimers
      */
     TX_TIMER           gLimActiveToPassiveChannelTimer;
     TX_TIMER           g_lim_ap_ecsa_timer;
+    /* SAE authentication related timer */
+    TX_TIMER           sae_auth_timer;
 //********************TIMER SECTION ENDS**************************************************
 // ALL THE FIELDS BELOW THIS CAN BE ZEROED OUT in limInitialize
 //****************************************************************************************
@@ -378,6 +380,12 @@ typedef struct sAniSirLim
     tSirMacAddr         gSelfMacAddr;   //added for BT-AMP Support 
     tSirMacAddr         spoofMacAddr;   //added for Mac Addr Spoofing support
     tANI_U8             isSpoofingEnabled;
+
+    /*
+     * @spoof_mac_oui = true when VENDOR_SUBCMD_MAC_OUI is invoked for
+     * mac spoofing.
+     */
+    bool                spoof_mac_oui;
 
     //////////////////////////////////////////     BSS RELATED END ///////////////////////////////////////////
     // Place holder for StartBssReq message

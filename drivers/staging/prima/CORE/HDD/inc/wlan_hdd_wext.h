@@ -402,10 +402,6 @@ extern int iw_set_auth(struct net_device *dev,struct iw_request_info *info,
 extern int iw_get_auth(struct net_device *dev,struct iw_request_info *info,
                        union iwreq_data *wrqu,char *extra);
 
-VOS_STATUS iw_set_pno(struct net_device *dev, struct iw_request_info *info,
-                      union iwreq_data *wrqu, char *extra, int nOffset);
-
-
 VOS_STATUS iw_set_rssi_filter(struct net_device *dev, struct iw_request_info *info,
                               union iwreq_data *wrqu, char *extra, int nOffset);
 
@@ -469,6 +465,5 @@ int hdd_setBand(struct net_device *dev, u8 ui_band);
 int hdd_setBand_helper(struct net_device *dev, const char *command);
 VOS_STATUS wlan_hdd_get_frame_logs(hdd_adapter_t *pAdapter, v_U8_t flag);
 int wlan_hdd_set_proximity(int set_value, tHalHandle hal);
-
 #endif // __WEXT_IW_H__
 

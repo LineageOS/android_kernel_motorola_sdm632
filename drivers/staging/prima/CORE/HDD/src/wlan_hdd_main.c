@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -62,6 +62,7 @@
 //#include <wlan_qct_driver.h>
 #include <wlan_hdd_includes.h>
 #include <vos_api.h>
+#include <vos_nvitem.h>
 #include <vos_sched.h>
 #include <linux/etherdevice.h>
 #include <linux/firmware.h>
@@ -140,9 +141,6 @@ int wlan_hdd_ftm_start(hdd_context_t *pAdapter);
 #define MEMORY_DEBUG_STR ""
 #endif
 #define MAX_WAIT_FOR_ROC_COMPLETION 3
-
-#define MAX_RESTART_DRIVER_EVENT_LENGTH 30
-
 /* the Android framework expects this param even though we don't use it */
 #define BUF_LEN 20
 static char fwpath_buffer[BUF_LEN];
@@ -154,18 +152,6 @@ static struct kparam_string fwpath = {
 static char *country_code;
 static int   enable_11d = -1;
 static int   enable_dfs_chan_scan = -1;
-
-#define BUF_LEN_SAR 10
-static char  sar_sta_buffer[BUF_LEN_SAR];
-static struct kparam_string sar_sta = {
-   .string = sar_sta_buffer,
-   .maxlen = BUF_LEN_SAR,
-};
-static char  sar_mhs_buffer[BUF_LEN_SAR];
-static struct kparam_string sar_mhs = {
-   .string = sar_mhs_buffer,
-   .maxlen = BUF_LEN_SAR,
-};
 
 #ifndef MODULE
 static int wlan_hdd_inited;
@@ -240,7 +226,6 @@ static vos_wake_lock_t wlan_wake_lock;
 
 /* set when SSR is needed after unload */
 static e_hdd_ssr_required isSsrRequired = HDD_SSR_NOT_REQUIRED;
-static vos_wake_lock_t wlan_wake_lock_scan; //Mot IKHSS7-28961: Incorrect empty scan results
 
 //internal function declaration
 static VOS_STATUS wlan_hdd_framework_restart(hdd_context_t *pHddCtx);
@@ -322,7 +307,12 @@ static int __hdd_netdev_notifier_call(struct notifier_block * nb,
                                          unsigned long state,
                                          void *ndev)
 {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0))
+   struct netdev_notifier_info *info = ndev;
+   struct net_device *dev = info->dev;
+#else
    struct net_device *dev = ndev;
+#endif
    hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
    hdd_context_t *pHddCtx;
 #ifdef WLAN_BTAMP_FEATURE
@@ -3850,6 +3840,12 @@ int hdd_parse_disable_chan_cmd(hdd_adapter_t *adapter, tANI_U8 *ptr)
 
 mem_alloc_failed:
 	mutex_unlock(&hdd_ctx->cache_channel_lock);
+        /* Disable the channels received in command SET_DISABLE_CHANNEL_LIST*/
+	if (!is_command_repeated) {
+		wlan_hdd_disable_channels(hdd_ctx);
+		hdd_check_and_disconnect_sta_on_invalid_channel(hdd_ctx);
+	}
+
 	EXIT();
 
 	return ret;
@@ -8543,13 +8539,8 @@ VOS_STATUS hdd_request_firmware(char *pfileName,v_VOID_t *pCtx,v_VOID_t **ppfw_d
        }
    }
    else if(!strcmp(WLAN_NV_FILE, pfileName)) {
-        char sysfs_fname[50];
-        if (wcnss_get_wlan_nv_name(sysfs_fname) != 0) {
-            hddLog(VOS_TRACE_LEVEL_INFO, "%s: wcnss_get_wlan_nv_name returned non zero", __func__);
-            memcpy(sysfs_fname, WLAN_NV_FILE, sizeof(WLAN_NV_FILE));
-        }
-        hddLog(VOS_TRACE_LEVEL_INFO, "%s: sysfs_name is: %s",  __func__, sysfs_fname);
-        status = request_firmware(&pHddCtx->nv, sysfs_fname, pHddCtx->parent_dev);
+
+       status = request_firmware(&pHddCtx->nv, pfileName, pHddCtx->parent_dev);
 
        if(status || !pHddCtx->nv || !pHddCtx->nv->data) {
            hddLog(VOS_TRACE_LEVEL_FATAL, "%s: nv %s download failed",
@@ -10489,7 +10480,12 @@ VOS_STATUS hdd_stop_adapter( hdd_context_t *pHddCtx, hdd_adapter_t *pAdapter,
          break;
 
       case WLAN_HDD_SOFTAP:
+          /* Delete all associated STAs before stopping AP */
+          if (test_bit(SOFTAP_BSS_STARTED, &pAdapter->event_flags))
+               hdd_del_all_sta(pAdapter);
+          /* Fall through */
       case WLAN_HDD_P2P_GO:
+
           if ( VOS_TRUE == bCloseSession )
           {
               status = hdd_sta_id_hash_detach(pAdapter);
@@ -11820,7 +11816,6 @@ static void __hdd_set_multicast_list(struct net_device *dev)
                MAC_ADDR_ARRAY(pAdapter->mc_addr_list.addr[i]));
          i++;
       }
-
    }
 
    if (pHddCtx->hdd_wlan_suspended)
@@ -11829,9 +11824,7 @@ static void __hdd_set_multicast_list(struct net_device *dev)
         * Configure the Mcast address list to FW
         * If wlan is already in suspend mode
         */
-       //Begin Mot IKLOCSEN-2711 rohita
-       //wlan_hdd_set_mc_addr_list(pAdapter, TRUE);
-       //End IKLOCSEN-2711
+       wlan_hdd_set_mc_addr_list(pAdapter, TRUE);
    }
    EXIT();
    return;
@@ -12672,15 +12665,79 @@ void hdd_prevent_suspend_timeout(v_U32_t timeout, uint32_t reason)
 
 }
 
-//Begin Mot IKHSS7-28961 : Incorrect emtpty scan results because of againg out
-void hdd_prevent_suspend_after_scan(long hz)
+/**
+ * hdd_get_feature_caps_cb() - Callback invoked from WDA
+ * @cookie: to identify HDD request to firmware
+ *
+ * This function is invoked from WDA when feature capabilities response
+ * is received from firmware.
+ *
+ * Return: None
+ */
+static void hdd_get_feature_caps_cb(void *cookie)
 {
-  //__pm_wakeup_event(&wlan_wake_lock_scan, hz);
+	struct hdd_request *request;
 
-    v_U32_t timeout = jiffies_to_msecs(hz) ;
-    hdd_prevent_suspend_timeout(timeout, WIFI_POWER_EVENT_WAKELOCK_SCAN);
+	request = hdd_request_get(cookie);
+	if (!request) {
+		hddLog(VOS_TRACE_LEVEL_ERROR, FL("Obsolete request"));
+		return;
+	}
+
+	pr_info("%s: Firmware feature capabilities received\n", __func__);
+
+	hdd_request_complete(request);
+	hdd_request_put(request);
 }
-//END IKHSS7-28961
+
+/**
+ * hdd_get_feature_caps() - Get features supported by firmware
+ * @hdd_ctx: Pointer to HDD context
+ *
+ * This function uses request manager framework to get the feature
+ * capabilities from firmware.
+ *
+ * Return: None
+ */
+static void hdd_get_feature_caps(hdd_context_t *hdd_ctx)
+{
+	VOS_STATUS status;
+	void *cookie;
+	int ret;
+	struct hdd_request *request;
+	static const struct hdd_request_params params = {
+		.priv_size = 0,
+		.timeout_ms = WLAN_WAIT_TIME_FEATURE_CAPS,
+	};
+	struct sir_feature_caps_params caps_params = {0};
+
+	request = hdd_request_alloc(&params);
+	if (!request) {
+		pr_err("%s: Request allocation failure\n", __func__);
+		return;
+	}
+
+	cookie = hdd_request_cookie(request);
+	caps_params.user_data = cookie;
+	caps_params.feature_caps_cb = hdd_get_feature_caps_cb;
+
+	status = sme_featureCapsExchange(&caps_params);
+	if (status != VOS_STATUS_SUCCESS) {
+		pr_err("%s: Unable to get feature caps\n", __func__);
+		goto end;
+	}
+
+	/* request was sent -- wait for the response */
+	ret = hdd_request_wait_for_response(request);
+	if (ret) {
+		pr_err("%s: SME timeout while retrieving feature caps\n",
+			__func__);
+		goto end;
+	}
+
+end:
+	hdd_request_put(request);
+}
 
 /**---------------------------------------------------------------------------
 
@@ -12816,12 +12873,13 @@ void hdd_exchange_version_and_caps(hdd_context_t *pHddCtx)
             sme_disableFeatureCapablity(IBSS_HEARTBEAT_OFFLOAD);
          }
 
-         sme_featureCapsExchange(pHddCtx->hHal);
+         hdd_get_feature_caps(pHddCtx);
       }
 
    } while (0);
 
 }
+
 void wlan_hdd_send_svc_nlink_msg(int type, void *data, int len)
 {
        struct sk_buff *skb;
@@ -12996,13 +13054,6 @@ static int hdd_generate_iface_mac_addr_auto(hdd_context_t *pHddCtx,
    unsigned int serialno;
    serialno = wcnss_get_serial_number();
 
-   /* BEGIN Motorola, gambugge, IKSWO-55806: Update OUI for WiFi fallback MAC address */
-   /* Motorola OUI */
-   mac_addr.bytes[0] = 0xF0;
-   mac_addr.bytes[1] = 0xD7;
-   mac_addr.bytes[2] = 0xAA;
-   /* END IKSWO-55806 */
-
    if (0 != serialno)
    {
       /* MAC address has 3 bytes of OUI so we have a maximum of 3
@@ -13095,7 +13146,7 @@ int wlan_hdd_mon_open(hdd_context_t *pHddCtx)
    }
 
    WLANTL_SetMonRxCbk( pVosContext, hdd_rx_packet_monitor_cbk );
-   WDA_featureCapsExchange(pVosContext);
+   sme_featureCapsExchange(NULL);
    wcnss_wlan_set_drvdata(pHddCtx->parent_dev, pHddCtx);
 
    pAdapter = hdd_open_adapter( pHddCtx, WLAN_HDD_MONITOR, "wlan%d",
@@ -13420,6 +13471,7 @@ int hdd_wlan_startup(struct device *dev )
    VOS_STATUS status;
    hdd_adapter_t *pAdapter = NULL;
    hdd_adapter_t *pP2pAdapter = NULL;
+   hdd_adapter_t *softapAdapter = NULL;
    hdd_context_t *pHddCtx = NULL;
    v_CONTEXT_t pVosContext= NULL;
 #ifdef WLAN_BTAMP_FEATURE
@@ -13904,6 +13956,8 @@ int hdd_wlan_startup(struct device *dev )
       goto err_vosstop;
    }
 
+   wlan_hdd_cfg80211_scan_randomization_init(wiphy);
+
 #ifndef CONFIG_ENABLE_LINUX_REG
    wlan_hdd_cfg80211_update_reg_info( wiphy );
 
@@ -13933,6 +13987,14 @@ int hdd_wlan_startup(struct device *dev )
 #endif
 
    wcnss_wlan_set_drvdata(pHddCtx->parent_dev, pHddCtx);
+
+#ifdef SAP_AUTH_OFFLOAD
+   if (!sme_IsFeatureSupportedByFW(SAP_OFFLOADS))
+   {
+       hddLog(VOS_TRACE_LEVEL_INFO, FL(" SAP AUTH OFFLOAD not supp by FW"));
+       pHddCtx->cfg_ini->enable_sap_auth_offload = 0;
+   }
+#endif
 
    if (VOS_STA_SAP_MODE == hdd_get_conparam())
    {
@@ -13989,6 +14051,17 @@ int hdd_wlan_startup(struct device *dev )
    {
       hddLog(VOS_TRACE_LEVEL_ERROR, "%s: hdd_open_adapter failed", __func__);
       goto err_close_adapter;
+   }
+
+   if ((strlen(pHddCtx->cfg_ini->enabledefaultSAP) != 0) &&
+       (strcmp(pHddCtx->cfg_ini->enabledefaultSAP, "") != 0)) {
+       softapAdapter = hdd_open_adapter( pHddCtx, WLAN_HDD_SOFTAP,
+                                       pHddCtx->cfg_ini->enabledefaultSAP,
+                                       wlan_hdd_get_intf_addr(pHddCtx), FALSE);
+       if (!softapAdapter) {
+         hddLog(VOS_TRACE_LEVEL_ERROR, "%s: hdd_open_adapter failed", __func__);
+         goto err_close_adapter;
+       }
    }
 
    if (country_code)
@@ -14205,25 +14278,15 @@ int hdd_wlan_startup(struct device *dev )
 
 #endif
 
-#ifdef SAP_AUTH_OFFLOAD
-   if (!sme_IsFeatureSupportedByFW(SAP_OFFLOADS))
-   {
-       hddLog(VOS_TRACE_LEVEL_INFO, FL(" SAP AUTH OFFLOAD not supp by FW"));
-       pHddCtx->cfg_ini->enable_sap_auth_offload = 0;
-   }
-#endif
-
    if (vos_is_multicast_logging())
        wlan_logging_set_log_level();
 
    hdd_register_mcast_bcast_filter(pHddCtx);
-   if (VOS_STA_SAP_MODE != hdd_get_conparam())
-   {
-      /* Action frame registered in one adapter which will
-       * applicable to all interfaces 
-       */
-      wlan_hdd_cfg80211_register_frames(pAdapter);
-   }
+
+   /* Action frame registered in one adapter which will
+    * applicable to all interfaces
+    */
+   wlan_hdd_cfg80211_register_frames(pAdapter);
 
    mutex_init(&pHddCtx->sap_lock);
    mutex_init(&pHddCtx->roc_lock);
@@ -14483,7 +14546,6 @@ static int hdd_driver_init( void)
    ENTER();
 
    vos_wake_lock_init(&wlan_wake_lock, "wlan");
-   vos_wake_lock_init(&wlan_wake_lock_scan, "wlan_scan"); //Mot IKHSS7-28961: Incorrect empty scan
 
    pr_info("%s: loading driver v%s\n", WLAN_MODULE_NAME,
            QWLAN_VERSIONSTR TIMER_MANAGER_STR MEMORY_DEBUG_STR);
@@ -14505,7 +14567,6 @@ static int hdd_driver_init( void)
    if (max_retries >= 10) {
       hddLog(VOS_TRACE_LEVEL_FATAL,"%s: WCNSS driver not ready", __func__);
       vos_wake_lock_destroy(&wlan_wake_lock);
-      vos_wake_lock_destroy(&wlan_wake_lock_scan);
 #ifdef WLAN_LOGGING_SOCK_SVC_ENABLE
       wlan_logging_sock_deinit_svc();
 #endif
@@ -14578,7 +14639,6 @@ static int hdd_driver_init( void)
       vos_mem_exit();
 #endif
       vos_wake_lock_destroy(&wlan_wake_lock);
-      vos_wake_lock_destroy(&wlan_wake_lock_scan); //Mot IKHSS7-28961: Incorrect empty scan results
 #ifdef WLAN_LOGGING_SOCK_SVC_ENABLE
       wlan_logging_sock_deinit_svc();
 #endif
@@ -14739,7 +14799,6 @@ static void hdd_driver_exit(void)
 
 done:
    vos_wake_lock_destroy(&wlan_wake_lock);
-   vos_wake_lock_destroy(&wlan_wake_lock_scan); //Mot IKHSS7-28961: Incorrect empty scan results
 
    pr_info("%s: driver unloaded\n", WLAN_MODULE_NAME);
 }
@@ -15093,27 +15152,6 @@ wlan_hdd_is_GO_power_collapse_allowed (hdd_context_t* pHddCtx)
           return FALSE;
 
 }
-
-// BEGIN MOTOROLA IKJB42MAIN-274, dpn473, 01/02/2013, Add flag to disable/enable MCC mode
-v_U8_t hdd_get_mcc_mode( void )
-{
-    v_CONTEXT_t pVosContext = vos_get_global_context( VOS_MODULE_ID_HDD, NULL );
-    hdd_context_t *pHddCtx;
-
-    if (NULL != pVosContext)
-    {
-        pHddCtx = vos_get_context( VOS_MODULE_ID_HDD, pVosContext);
-        if (NULL != pHddCtx)
-        {
-            return (v_U8_t)pHddCtx->cfg_ini->enableMCC;
-        }
-    }
-    /* we are in an invalid state :( */
-    hddLog(LOGE, "%s: Invalid context", __func__);
-    return (v_U8_t)0;
-}
-// END IKJB42MAIN-274
-
 /* Decide whether to allow/not the apps power collapse. 
  * Allow apps power collapse if we are in connected state.
  * if not, allow only if we are in IMPS  */
@@ -15723,6 +15761,13 @@ VOS_STATUS wlan_hdd_init_channels_for_cc(hdd_context_t *pHddCtx, driver_load_typ
 {
    eHalStatus status;
 
+   if (init == INIT && init_by_reg_core_user) {
+      init_by_reg_core_user = false;
+      pr_info("driver regulatory hint is not required");
+
+      return VOS_STATUS_SUCCESS;
+   }
+
    status = sme_InitChannelsForCC(pHddCtx->hHal, init);
    if (HAL_STATUS_SUCCESS(status))
    {
@@ -15755,7 +15800,8 @@ v_U8_t hdd_is_fw_logging_enabled(void)
     pHddCtx = vos_get_context(VOS_MODULE_ID_HDD,
                               vos_get_global_context(VOS_MODULE_ID_HDD, NULL));
 
-    return (pHddCtx && pHddCtx->cfg_ini->enableMgmtLogging);
+    return (pHddCtx && pHddCtx->cfg_ini->wlanLoggingEnable &&
+            pHddCtx->cfg_ini->enableMgmtLogging);
 }
 
 /*
@@ -15768,8 +15814,10 @@ v_U8_t hdd_is_fw_ev_logging_enabled(void)
     pHddCtx = vos_get_context(VOS_MODULE_ID_HDD,
                               vos_get_global_context(VOS_MODULE_ID_HDD, NULL));
 
-    return (pHddCtx && pHddCtx->cfg_ini->enableFWLogging);
+    return (pHddCtx && pHddCtx->cfg_ini->wlanLoggingEnable &&
+            pHddCtx->cfg_ini->enableFWLogging);
 }
+
 /*
  * API to find if there is any session connected
  */
@@ -15838,6 +15886,8 @@ void hdd_indicate_mgmt_frame(tSirSmeMgmtFrameInd *frame_ind)
    hdd_context_t *hdd_ctx = NULL;
    hdd_adapter_t *adapter = NULL;
    v_CONTEXT_t vos_context = NULL;
+   struct ieee80211_mgmt *mgmt =
+           (struct ieee80211_mgmt *)frame_ind->frameBuf;
 
    /* Get the global VOSS context.*/
    vos_context = vos_get_global_context(VOS_MODULE_ID_SYS, NULL);
@@ -15853,6 +15903,12 @@ void hdd_indicate_mgmt_frame(tSirSmeMgmtFrameInd *frame_ind)
    {
        return;
    }
+
+   if (frame_ind->frameLen < ieee80211_hdrlen(mgmt->frame_control)) {
+        hddLog(LOGE, FL(" Invalid frame length"));
+        return;
+   }
+
    adapter = hdd_get_adapter_by_sme_session_id(hdd_ctx,
                                           frame_ind->sessionId);
 
@@ -18525,12 +18581,6 @@ bool hdd_is_cli_iface_up(hdd_context_t *hdd_ctx)
 	return false;
 }
 
-static int sar_changed_handler(const char *kmessage,
-                                  const struct kernel_param *kp)
-{
-   return param_set_copystring(kmessage, kp);
-}
-
 //Register the module init/exit functions
 module_init(hdd_module_init);
 module_exit(hdd_module_exit);
@@ -18546,11 +18596,6 @@ static const struct kernel_param_ops con_mode_ops = {
 
 static const struct kernel_param_ops fwpath_ops = {
 	.set = fwpath_changed_handler,
-	.get = param_get_string,
-};
-
-static const struct kernel_param_ops sar_ops = {
-	.set = sar_changed_handler,
 	.get = param_get_string,
 };
 
@@ -18572,10 +18617,3 @@ module_param(enable_11d, int,
 
 module_param(country_code, charp,
              S_IRUSR | S_IRGRP | S_IROTH);
-
-module_param_cb(sar_sta, &sar_ops, &sar_sta,
-                    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-
-module_param_cb(sar_mhs, &sar_ops, &sar_mhs,
-                    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-

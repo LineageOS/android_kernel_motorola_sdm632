@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -2761,6 +2761,7 @@ eHalStatus sme_ProcessMsg(tHalHandle hHal, vos_msg_t* pMsg)
                    vos_msg_t vosMessage = {0};
                    tANI_U32 session_id = 0;
                    bool active_scan;
+                   tANI_U32 nTime = 0;
 
                    if (pSmeCoexInd->coexIndType == SIR_COEX_IND_TYPE_DISABLE_AGGREGATION_IN_2p4)
                    {
@@ -2788,6 +2789,11 @@ eHalStatus sme_ProcessMsg(tHalHandle hHal, vos_msg_t* pMsg)
                        pMac->scan.fRestartIdleScan = eANI_BOOLEAN_TRUE;
                        pMac->scan.fCancelIdleScan = eANI_BOOLEAN_FALSE;
 
+                       if(csrIsAllSessionDisconnected(pMac) &&
+                          !HAL_STATUS_SUCCESS(csrScanTriggerIdleScan(pMac,
+                           &nTime))) {
+                              csrScanStartIdleScanTimer(pMac, nTime);
+                       }
                        /*
                         * If aggregation during SCO is enabled, there is a
                         * possibility for an active BA session. This session
@@ -2874,7 +2880,6 @@ eHalStatus sme_ProcessMsg(tHalHandle hHal, vos_msg_t* pMsg)
                           "(PACKET_COALESCING_FILTER_MATCH_COUNT_RSP), nothing to process");
                 }
                 break;
-
 #endif // WLAN_FEATURE_PACKET_FILTERING
           case eWNI_SME_PRE_SWITCH_CHL_IND:
              {
@@ -3420,9 +3425,8 @@ eHalStatus sme_ScanRequest(tHalHandle hHal, tANI_U8 sessionId, tCsrScanRequest *
 
     do
     {
-        //Moto IKVPREL1L-7890: Dont block any scans while in BT call similar to titan/Victara
-        if(pMac->scan.fScanEnable) /*&&
-           (pMac->isCoexScoIndSet ? sco_isScanAllowed(pMac, pscanReq) : TRUE))*/
+        if(pMac->scan.fScanEnable &&
+           (pMac->isCoexScoIndSet ? sco_isScanAllowed(pMac, pscanReq) : TRUE))
         {
             status = sme_AcquireGlobalLock( &pMac->sme );
             if ( HAL_STATUS_SUCCESS( status ) )
@@ -4483,9 +4487,9 @@ eHalStatus sme_RoamSetPMKIDCache( tHalHandle hHal, tANI_U8 sessionId,
 
 eHalStatus sme_RoamDelPMKIDfromCache( tHalHandle hHal, tANI_U8 sessionId,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,18,0))
-                                      const tANI_U8 *pBSSId,
+                                      tPmkidCacheInfo *pmksa,
 #else
-                                      tANI_U8 *pBSSId,
+                                      tPmkidCacheInfo *pmksa,
 #endif
                                       tANI_BOOLEAN flush_cache )
 {
@@ -4500,7 +4504,7 @@ eHalStatus sme_RoamDelPMKIDfromCache( tHalHandle hHal, tANI_U8 sessionId,
       if( CSR_IS_SESSION_VALID( pMac, sessionId ) )
       {
          status = csrRoamDelPMKIDfromCache( pMac, sessionId,
-                                            pBSSId, flush_cache );
+                                            pmksa, flush_cache );
       }
       else
       {
@@ -10161,22 +10165,19 @@ eHalStatus sme_SetTmLevel(tHalHandle hHal, v_U16_t newTMLevel, v_U16_t tmMode)
     return(status);
 }
 
-/*---------------------------------------------------------------------------
-
-  \brief sme_featureCapsExchange() - SME interface to exchange capabilities between
-  Host and FW.
-
-  \param  hHal - HAL handle for device
-
-  \return NONE
-
----------------------------------------------------------------------------*/
-void sme_featureCapsExchange( tHalHandle hHal)
+VOS_STATUS
+sme_featureCapsExchange(struct sir_feature_caps_params *params)
 {
-    v_CONTEXT_t vosContext = vos_get_global_context(VOS_MODULE_ID_SME, NULL);
-    MTRACE(vos_trace(VOS_MODULE_ID_SME,
-                     TRACE_CODE_SME_RX_HDD_CAPS_EXCH, NO_SESSION, 0));
-    WDA_featureCapsExchange(vosContext);
+	VOS_STATUS status;
+	v_CONTEXT_t vosContext = vos_get_global_context(VOS_MODULE_ID_SME,
+							NULL);
+
+	MTRACE(vos_trace(VOS_MODULE_ID_SME,
+	       TRACE_CODE_SME_RX_HDD_CAPS_EXCH, NO_SESSION, 0));
+
+	status = WDA_featureCapsExchange(vosContext, params);
+
+	return status;
 }
 
 /*---------------------------------------------------------------------------
@@ -13288,7 +13289,8 @@ tANI_BOOLEAN  sme_Is11dCountrycode(tHalHandle hHal)
     }
 }
 
-eHalStatus sme_SpoofMacAddrReq(tHalHandle hHal, v_MACADDR_t *macaddr)
+eHalStatus
+sme_SpoofMacAddrReq(tHalHandle hHal, v_MACADDR_t *macaddr, bool spoof_mac_oui)
 {
    tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
    eHalStatus status = eHAL_STATUS_SUCCESS;
@@ -13305,6 +13307,8 @@ eHalStatus sme_SpoofMacAddrReq(tHalHandle hHal, v_MACADDR_t *macaddr)
                                                     sizeof(tSirSpoofMacAddrReq), 0);
            vos_mem_copy(pMacSpoofCmd->u.macAddrSpoofCmd.macAddr,
                                                macaddr->bytes, VOS_MAC_ADDRESS_LEN);
+
+           pMacSpoofCmd->u.macAddrSpoofCmd.spoof_mac_oui = spoof_mac_oui;
 
            status = csrQueueSmeCommand(pMac, pMacSpoofCmd, false);
            if ( !HAL_STATUS_SUCCESS( status ) )
@@ -15383,3 +15387,104 @@ uint32_t sme_unpack_rsn_ie(tHalHandle hal, uint8_t *buf,
 
          return dot11fUnpackIeRSN(mac_ctx, buf, buf_len, rsn_ie);
 }
+
+/**
+ * sme_prepare_mgmt_tx() - Prepares mgmt frame
+ * @hal: The handle returned by mac_open
+ * @session_id: session id
+ * @buf: pointer to frame
+ * @len: frame length
+ *
+ * Return: eHalStatus
+ */
+static eHalStatus sme_prepare_mgmt_tx(tHalHandle hal, uint8_t session_id,
+                                      const uint8_t *buf, uint32_t len)
+{
+    eHalStatus status = eHAL_STATUS_SUCCESS;
+    VOS_STATUS vos_status = VOS_STATUS_SUCCESS;
+    vos_msg_t vos_message;
+    struct sir_mgmt_msg *msg;
+    uint16_t msg_len;
+
+    VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_DEBUG,
+              ("prepares auth frame"));
+
+    msg_len = sizeof(*msg) + len;
+    msg = vos_mem_malloc(msg_len);
+    if (msg == NULL) {
+        status = eHAL_STATUS_FAILED_ALLOC;
+    } else {
+        msg->type = eWNI_SME_SEND_MGMT_FRAME_TX;
+        msg->msg_len = msg_len;
+        msg->session_id = session_id;
+        msg->data = (uint8_t *)msg + sizeof(*msg);
+        vos_mem_copy(msg->data, buf, len);
+        vos_message.bodyptr = msg;
+        vos_message.type =  eWNI_SME_SEND_MGMT_FRAME_TX;
+        vos_status = vos_mq_post_message(VOS_MQ_ID_PE, &vos_message);
+        if (!VOS_IS_STATUS_SUCCESS(vos_status)) {
+            vos_mem_free(msg);
+            status = eHAL_STATUS_FAILURE;
+        }
+    }
+    return status;
+}
+
+eHalStatus sme_send_mgmt_tx(tHalHandle hal, uint8_t session_id,
+                            const uint8_t *buf, uint32_t len)
+{
+    eHalStatus status = eHAL_STATUS_SUCCESS;
+    tpAniSirGlobal mac = PMAC_STRUCT(hal);
+
+    MTRACE(vos_trace(VOS_MODULE_ID_SME,
+           TRACE_CODE_SME_RX_HDD_SEND_MGMT_TX, session_id, 0));
+
+    status = sme_AcquireGlobalLock(&mac->sme);
+    if (HAL_STATUS_SUCCESS(status)) {
+        status = sme_prepare_mgmt_tx(hal, session_id, buf, len);
+        sme_ReleaseGlobalLock(&mac->sme);
+    }
+
+    return status;
+}
+
+#ifdef WLAN_FEATURE_SAE
+eHalStatus sme_handle_sae_msg(tHalHandle hal, uint8_t session_id,
+                              uint8_t sae_status)
+{
+    eHalStatus hal_status = eHAL_STATUS_SUCCESS;
+    tpAniSirGlobal mac = PMAC_STRUCT(hal);
+    struct sir_sae_msg *sae_msg;
+    vos_msg_t vos_message;
+    VOS_STATUS vos_status = VOS_STATUS_SUCCESS;
+
+    hal_status = sme_AcquireGlobalLock(&mac->sme);
+    if (HAL_STATUS_SUCCESS(hal_status)) {
+        sae_msg = vos_mem_malloc(sizeof(*sae_msg));
+        if (!sae_msg) {
+            hal_status = eHAL_STATUS_FAILED_ALLOC;
+            VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_ERROR,
+                      "SAE: memory allocation failed");
+        } else {
+            sae_msg->message_type = eWNI_SME_SEND_SAE_MSG;
+            sae_msg->length = sizeof(*sae_msg);
+            sae_msg->session_id = session_id;
+            sae_msg->sae_status = sae_status;
+            vos_message.bodyptr = sae_msg;
+            vos_message.type =  eWNI_SME_SEND_SAE_MSG;
+            VOS_TRACE(VOS_MODULE_ID_SME, VOS_TRACE_LEVEL_DEBUG,
+                      "SAE: sae_status %d session_id %d", sae_msg->sae_status,
+                      sae_msg->session_id);
+
+            vos_status = vos_mq_post_message(VOS_MQ_ID_PE, &vos_message);
+            if (!VOS_IS_STATUS_SUCCESS(vos_status)) {
+                vos_mem_free(sae_msg);
+                hal_status = eHAL_STATUS_FAILURE;
+            }
+       }
+       sme_ReleaseGlobalLock(&mac->sme);
+}
+
+return hal_status;
+}
+#endif

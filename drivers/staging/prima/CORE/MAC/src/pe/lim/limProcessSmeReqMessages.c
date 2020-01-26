@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1541,6 +1541,8 @@ __limProcessSmeScanReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
                    pScanReq->max_chntime_btc_esco;
           pMlmScanReq->dot11mode = pScanReq->dot11mode;
           pMlmScanReq->p2pSearch = pScanReq->p2pSearch;
+          pMlmScanReq->scan_randomize = pScanReq->scan_randomize;
+          pMlmScanReq->nl_scan = pScanReq->nl_scan;
 
           //Store the smeSessionID and transaction ID for later use.
           pMac->lim.gSmeSessionId = pScanReq->sessionId;
@@ -1682,6 +1684,31 @@ static void __limProcessClearDfsChannelList(tpAniSirGlobal pMac,
     vos_mem_set( &pMac->lim.dfschannelList,
                   sizeof(tSirDFSChannelList), 0);
 }
+
+#ifdef WLAN_FEATURE_SAE
+/**
+ * lim_update_sae_config()- This API update SAE session info to csr config
+ * from join request.
+ * @session: PE session
+ * @sme_join_req: pointer to join request
+ *
+ * Return: None
+ */
+static void lim_update_sae_config(tpPESession session,
+                                  tpSirSmeJoinReq sme_join_req)
+{
+    session->sae_pmk_cached = sme_join_req->sae_pmk_cached;
+
+    VOS_TRACE(VOS_MODULE_ID_PE, VOS_TRACE_LEVEL_DEBUG,
+              FL("pmk_cached %d for BSSID=" MAC_ADDRESS_STR),
+              session->sae_pmk_cached,
+              MAC_ADDR_ARRAY(sme_join_req->bssDescription.bssId));
+}
+#else
+static inline void lim_update_sae_config(tpPESession session,
+                                         tpSirSmeJoinReq sme_join_req)
+{}
+#endif
 
 /**
  * __limProcessSmeJoinReq()
@@ -2000,6 +2027,8 @@ __limProcessSmeJoinReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         psessionEntry->isFastRoamIniFeatureEnabled = pSmeJoinReq->isFastRoamIniFeatureEnabled;
 #endif
         psessionEntry->txLdpcIniFeatureEnabled = pSmeJoinReq->txLdpcIniFeatureEnabled;
+
+        lim_update_sae_config(psessionEntry, pSmeJoinReq);
 
         if (psessionEntry->bssType == eSIR_INFRASTRUCTURE_MODE)
         {
@@ -2643,6 +2672,16 @@ __limProcessSmeDisassocReq(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         case eLIM_BT_AMP_STA_ROLE:
             switch (psessionEntry->limSmeState)
             {
+		/* cleanup FT session and proceed with disconnect
+		 * if received disconnect from supplicant when roaming
+		 * and lim state is eLIM_SME_WT_REASSOC_STATE. As the
+		 * FT session would have already created but is not cleaned.
+		 * This will prevent sending duplicate add bss request,
+		 * if we try to disconnect and connect to the same AP
+		 */
+		case eLIM_SME_WT_REASSOC_STATE:
+			limFTCleanup(pMac);
+			/* Fall through */
                 case eLIM_SME_ASSOCIATED_STATE:
                 case eLIM_SME_LINK_EST_STATE:
                     limLog(pMac, LOG1, FL("Rcvd SME_DISASSOC_REQ while in "
@@ -5591,6 +5630,8 @@ __limProcessSmeSpoofMacAddrRequest(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
    vos_mem_copy( pSpoofMacAddrParams->macAddr, pSmeReq->macAddr, sizeof(tSirMacAddr) );
 
    vos_mem_copy(pMac->lim.spoofMacAddr, pSmeReq->macAddr, VOS_MAC_ADDRESS_LEN);
+
+   pMac->lim.spoof_mac_oui = pSmeReq->spoof_mac_oui;
 
    limLog( pMac, LOG1, FL("Recieved Spoofed Mac Addr request with Addr:"
                 MAC_ADDRESS_STR), MAC_ADDR_ARRAY(pMac->lim.spoofMacAddr) );
