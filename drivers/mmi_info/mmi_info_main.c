@@ -23,7 +23,7 @@ static char *bootargs_str;
 
 int mmi_get_bootarg(char *key, char **value)
 {
-	const char *bootargs_tmp = NULL;
+	const char *bootargs_ptr = NULL;
 	char *idx = NULL;
 	char *kvpair = NULL;
 	int err = 1;
@@ -32,18 +32,16 @@ int mmi_get_bootarg(char *key, char **value)
 	if (n == NULL)
 		goto err;
 
-	if (of_property_read_string(n, "bootargs", &bootargs_tmp) != 0)
-		goto putnode;
+	if (of_property_read_string(n, "bootargs", &bootargs_ptr) != 0)
+		goto err_putnode;
 
-	if (!bootargs_str)
-		/* The following operations need a non-const
-		 * version of bootargs
-		 */
-		bootargs_str = kzalloc(strlen(bootargs_tmp) + 1, GFP_KERNEL);
+	if (!bootargs_str) {
+		/* Following operations need a non-const version of bootargs */
+		bootargs_str = kzalloc(strlen(bootargs_ptr) + 1, GFP_KERNEL);
 		if (!bootargs_str)
-			goto putnode;
-
-	strlcpy(bootargs_str, bootargs_tmp, strlen(bootargs_tmp) + 1);
+			goto err_putnode;
+	}
+	strlcpy(bootargs_str, bootargs_ptr, strlen(bootargs_ptr) + 1);
 
 	idx = strnstr(bootargs_str, key, strlen(bootargs_str));
 	if (idx) {
@@ -56,7 +54,7 @@ int mmi_get_bootarg(char *key, char **value)
 			}
 	}
 
-putnode:
+err_putnode:
 	of_node_put(n);
 err:
 	return err;
