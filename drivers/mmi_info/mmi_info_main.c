@@ -43,7 +43,8 @@ int mmi_get_bootarg(char *key, char **value)
 		if (!bootargs_str)
 			goto putnode;
 
-	strlcpy(bootargs_str, bootargs_tmp, strlen(bootargs_tmp) + 1);
+	strscpy(bootargs_str, bootargs_tmp, 
+            sizeof(bootargs_str));
 
 	idx = strnstr(bootargs_str, key, strlen(bootargs_str));
 	if (idx) {
