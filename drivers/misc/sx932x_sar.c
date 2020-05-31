@@ -33,7 +33,7 @@
 
 /* main struct, interrupt,init,pointers */
 #include <linux/input/sx9325_sar.h>
-
+#include "base.h"
 
 #define IDLE 0
 #define ACTIVE 1
@@ -1044,7 +1044,7 @@ static int sx9325_probe(struct i2c_client *client,
 	if (sx9325_detect(client) == 0)
 		return -ENODEV;
 
-	pplatData = kzalloc(sizeof(pplatData), GFP_KERNEL);
+	pplatData = kzalloc(sizeof(struct sx9325_platform_data), GFP_KERNEL);
 	sx9325_platform_data_of_init(client, pplatData);
 	client->dev.platform_data = pplatData;
 
@@ -1177,6 +1177,9 @@ static int sx9325_probe(struct i2c_client *client,
 			LOG_ERR("Create reg file failed (%d)\n", ret);
 			return ret;
 		}
+
+		/*restore sys/class/capsense label*/
+		kobject_uevent(&capsense_class.p->subsys.kobj, KOBJ_CHANGE);
 #ifdef USE_SENSORS_CLASS
 		sensors_capsensor_top_cdev.sensors_enable =
 							capsensor_set_enable;
@@ -1578,8 +1581,9 @@ static void sx93XX_worker_func(struct work_struct *work)
 void sx93XX_suspend(psx93XX_t this)
 {
 	if (this) {
-		write_register(this, SX932x_CTRL1_REG,
-				this->board->cust_prox_ctrl0&0xdf);
+                if (mEnabled)
+		    write_register(this, SX932x_CTRL1_REG,
+				this->board->cust_prox_ctrl0&0x20);
 		if (sx9325_debug_enable)
 			LOG_INFO("sx9325 suspend: disable irq!\n");
 		disable_irq(this->irq);
@@ -1599,8 +1603,9 @@ void sx93XX_resume(psx93XX_t this)
 		sx93XX_schedule_work(this, 0);
 #endif
 		enable_irq(this->irq);
-		write_register(this, SX932x_CTRL1_REG,
-				this->board->cust_prox_ctrl0|0x20);
+                if (mEnabled)
+		    write_register(this, SX932x_CTRL1_REG,
+				this->board->cust_prox_ctrl0);
 	}
 }
 

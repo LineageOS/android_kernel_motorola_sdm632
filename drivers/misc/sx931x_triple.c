@@ -33,6 +33,7 @@
 
 /* main struct, interrupt,init,pointers */
 #include <linux/input/sx9310_triple.h>
+#include "base.h"
 
 #define IDLE 0
 #define ACTIVE 1
@@ -1122,7 +1123,7 @@ static int sx9310_probe(struct i2c_client *client,
 
 	LOG_INFO("sx9310_probe()\n");
 
-	pplatData = kzalloc(sizeof(pplatData), GFP_KERNEL);
+	pplatData = kzalloc(sizeof(struct sx9310_platform_data), GFP_KERNEL);
 	sx9310_platform_data_of_init(client, pplatData);
 	client->dev.platform_data = pplatData;
 
@@ -1296,6 +1297,9 @@ static int sx9310_probe(struct i2c_client *client,
 			LOG_ERR("Create reg file failed (%d)\n", ret);
 			return ret;
 		}
+
+		/*restore sys/class/capsense label*/
+		kobject_uevent(&capsense_class.p->subsys.kobj, KOBJ_CHANGE);
 #ifdef USE_SENSORS_CLASS
 		sensors_capsensor_top_cdev.sensors_enable =
 							capsensor_set_enable;
@@ -1660,6 +1664,10 @@ void sx93XX_suspend(psx93XX_t this)
 		if (sx9310_debug_enable)
 			LOG_INFO("sx9310 suspend: disable irq!\n");
 		disable_irq(this->irq);
+                /* if upper layer don't disable capsensor, */
+                /* we  should let it enter sleep in suspend. */
+                if (mEnabled)
+                    write_register(this, SX9310_CPS_CTRL0_REG, 0x20);
 	}
 }
 void sx93XX_resume(psx93XX_t this)
@@ -1675,6 +1683,9 @@ void sx93XX_resume(psx93XX_t this)
 #else
 		sx93XX_schedule_work(this, 0);
 #endif
+                /* we should let capsensor enter active in resume*/
+                if (mEnabled)
+                    write_register(this, SX9310_CPS_CTRL0_REG, 0x2f);
 		enable_irq(this->irq);
 		write_register(this,0x41,0x01);
 	}
