@@ -866,7 +866,7 @@ config SARSENSOR_SX9310
 	  Say Y here if you have a sar sensor SX9310 connected
 	  to your system.If unsure, say N.
 
-source "drivers/misc/eeprom/Kconfig"
+source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/awinic/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
