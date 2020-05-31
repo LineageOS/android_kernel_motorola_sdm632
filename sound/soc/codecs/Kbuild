@@ -4,10 +4,12 @@ EXTRA_CFLAGS += -Wall
 EXTRA_CFLAGS += -Itechpack/audio/include
 EXTRA_CFLAGS += -Itechpack/audio/include/uapi
 
-EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER
-
 ifeq ($(CONFIG_CHANNEL_DTB), y)
 EXTRA_CFLAGS += -DCONFIG_TAS2560_REGMAP -DCONFIG_TAS2560_CODEC -DCONFIG_TAS2560_MISC -DCONFIG_SND_SOC_TAS2560
+endif
+
+ifeq ($(CONFIG_GINNA_DTB), y)
+EXTRA_CFLAGS += -DCONFIG_AW882XX_CODEC -DCONFIG_AW882XX_DSP
 endif
 
 ifeq ($(KDIR),)
@@ -23,6 +25,7 @@ EXTRA_CFLAGS += -Isound/soc/codecs/inc
 EXTRA_CFLAGS += -Werror
 
 ifeq ($(CONFIG_RIVER_DTB), y)
+EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER
 cirrus_madera-objs = madera.o madera-slimbus.o
 obj-y += cirrus_madera.o
 
@@ -51,9 +54,6 @@ ifneq ($(filter m y,$(CONFIG_SND_SOC_CS35L41_SPI)),)
 else
    cirrus_cs35l41-objs += cs35l41-i2c.o
 endif
-
-cirrus_playback-objs = msm-cirrus-playback.o
-obj-y += cirrus_playback.o
 endif
 
 ifeq ($(CONFIG_OCEAN_DTB), y)
@@ -77,4 +77,9 @@ obj-y += tas2560_algo.o
 
 tas2560_calib-objs = tas2560-calib.o
 obj-y += tas2560_calib.o
+endif
+
+ifeq ($(CONFIG_GINNA_DTB), y)
+snd_smartpa_aw882xx-objs = aw882xx.o
+obj-y += snd_smartpa_aw882xx.o
 endif
