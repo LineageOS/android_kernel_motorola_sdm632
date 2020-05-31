@@ -683,9 +683,6 @@ WLANSAP_StartBss
             }
         }
 
-//BEGIN MOT a19110 IKSWO-8490 Comment out initialisation of
-//acl list. We use driver ioctl to set it
-#if 0
         // Copy MAC filtering settings to sap context
         pSapCtx->eSapMacAddrAclMode = pConfig->SapMacaddr_acl;
         vos_mem_copy(pSapCtx->acceptMacList, pConfig->accept_mac, sizeof(pConfig->accept_mac));
@@ -694,8 +691,6 @@ WLANSAP_StartBss
         vos_mem_copy(pSapCtx->denyMacList, pConfig->deny_mac, sizeof(pConfig->deny_mac));
         pSapCtx->nDenyMac = pConfig->num_deny_mac;
         sapSortMacList(pSapCtx->denyMacList, pSapCtx->nDenyMac);
-#endif
-//END IKSWO-8490
 
         /* Fill in the event structure for FSM */
         sapEvent.event = eSAP_HDD_START_INFRA_BSS;
@@ -1439,7 +1434,7 @@ WLANSAP_SetChannelRange(tHalHandle hHal,v_U8_t startChannel, v_U8_t endChannel,
     {
        case eSAP_RF_SUBBAND_2_4_GHZ:
           bandStartChannel = RF_CHAN_1;
-          bandEndChannel = RF_CHAN_11; //IKSWP-4221
+          bandEndChannel = RF_CHAN_14;
           break;
 
        case eSAP_RF_SUBBAND_5_LOW_GHZ:
@@ -1458,12 +1453,12 @@ WLANSAP_SetChannelRange(tHalHandle hHal,v_U8_t startChannel, v_U8_t endChannel,
 
        case eSAP_RF_SUBBAND_5_HIGH_GHZ:
           bandStartChannel = RF_CHAN_149;
-          bandEndChannel = RF_CHAN_161; //IKSWP-4221
+          bandEndChannel = RF_CHAN_165;
           break;
 
        case eSAP_RF_SUBBAND_5_ALL_GHZ:
           bandStartChannel = RF_CHAN_36;
-          bandEndChannel = RF_CHAN_161; //IKSWP-4221
+          bandEndChannel = RF_CHAN_165;
           break;
 
        default:

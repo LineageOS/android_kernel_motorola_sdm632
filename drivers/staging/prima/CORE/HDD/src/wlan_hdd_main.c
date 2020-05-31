@@ -141,9 +141,6 @@ int wlan_hdd_ftm_start(hdd_context_t *pAdapter);
 #define MEMORY_DEBUG_STR ""
 #endif
 #define MAX_WAIT_FOR_ROC_COMPLETION 3
-
-#define MAX_RESTART_DRIVER_EVENT_LENGTH 30
-
 /* the Android framework expects this param even though we don't use it */
 #define BUF_LEN 20
 static char fwpath_buffer[BUF_LEN];
@@ -155,18 +152,6 @@ static struct kparam_string fwpath = {
 static char *country_code;
 static int   enable_11d = -1;
 static int   enable_dfs_chan_scan = -1;
-
-#define BUF_LEN_SAR 10
-static char  sar_sta_buffer[BUF_LEN_SAR];
-static struct kparam_string sar_sta = {
-   .string = sar_sta_buffer,
-   .maxlen = BUF_LEN_SAR,
-};
-static char  sar_mhs_buffer[BUF_LEN_SAR];
-static struct kparam_string sar_mhs = {
-   .string = sar_mhs_buffer,
-   .maxlen = BUF_LEN_SAR,
-};
 
 #ifndef MODULE
 static int wlan_hdd_inited;
@@ -241,7 +226,6 @@ static vos_wake_lock_t wlan_wake_lock;
 
 /* set when SSR is needed after unload */
 static e_hdd_ssr_required isSsrRequired = HDD_SSR_NOT_REQUIRED;
-static vos_wake_lock_t wlan_wake_lock_scan; //Mot IKHSS7-28961: Incorrect empty scan results
 
 //internal function declaration
 static VOS_STATUS wlan_hdd_framework_restart(hdd_context_t *pHddCtx);
@@ -8555,13 +8539,8 @@ VOS_STATUS hdd_request_firmware(char *pfileName,v_VOID_t *pCtx,v_VOID_t **ppfw_d
        }
    }
    else if(!strcmp(WLAN_NV_FILE, pfileName)) {
-        char sysfs_fname[50];
-        if (wcnss_get_wlan_nv_name(sysfs_fname) != 0) {
-            hddLog(VOS_TRACE_LEVEL_INFO, "%s: wcnss_get_wlan_nv_name returned non zero", __func__);
-            memcpy(sysfs_fname, WLAN_NV_FILE, sizeof(WLAN_NV_FILE));
-        }
-        hddLog(VOS_TRACE_LEVEL_INFO, "%s: sysfs_name is: %s",  __func__, sysfs_fname);
-        status = request_firmware(&pHddCtx->nv, sysfs_fname, pHddCtx->parent_dev);
+
+       status = request_firmware(&pHddCtx->nv, pfileName, pHddCtx->parent_dev);
 
        if(status || !pHddCtx->nv || !pHddCtx->nv->data) {
            hddLog(VOS_TRACE_LEVEL_FATAL, "%s: nv %s download failed",
@@ -11811,8 +11790,6 @@ static void __hdd_set_multicast_list(struct net_device *dev)
       hddLog(VOS_TRACE_LEVEL_INFO,
             "%s: allow all multicast frames", __func__);
       pAdapter->mc_addr_list.mc_cnt = 0;
-      if(pAdapter->device_mode == WLAN_HDD_INFRA_STATION)
-          wlan_hdd_update_v6_filters(pAdapter, 1); // IKJB42MAIN-1244, Motorola, a19091
    }
    else
    {
@@ -11839,9 +11816,6 @@ static void __hdd_set_multicast_list(struct net_device *dev)
                MAC_ADDR_ARRAY(pAdapter->mc_addr_list.addr[i]));
          i++;
       }
-      if(pAdapter->device_mode == WLAN_HDD_INFRA_STATION)
-          wlan_hdd_update_v6_filters(pAdapter, 0); // IKJB42MAIN-1244, Motorola, a19091
-
    }
 
    if (pHddCtx->hdd_wlan_suspended)
@@ -11850,9 +11824,7 @@ static void __hdd_set_multicast_list(struct net_device *dev)
         * Configure the Mcast address list to FW
         * If wlan is already in suspend mode
         */
-       //Begin Mot IKLOCSEN-2711 rohita
-       //wlan_hdd_set_mc_addr_list(pAdapter, TRUE);
-       //End IKLOCSEN-2711
+       wlan_hdd_set_mc_addr_list(pAdapter, TRUE);
    }
    EXIT();
    return;
@@ -12765,15 +12737,6 @@ static void hdd_get_feature_caps(hdd_context_t *hdd_ctx)
 end:
 	hdd_request_put(request);
 }
-//Begin Mot IKHSS7-28961 : Incorrect emtpty scan results because of againg out
-void hdd_prevent_suspend_after_scan(long hz)
-{
-  //__pm_wakeup_event(&wlan_wake_lock_scan, hz);
-
-    v_U32_t timeout = jiffies_to_msecs(hz) ;
-    hdd_prevent_suspend_timeout(timeout, WIFI_POWER_EVENT_WAKELOCK_SCAN);
-}
-//END IKHSS7-28961
 
 /**---------------------------------------------------------------------------
 
@@ -13089,13 +13052,6 @@ static int hdd_generate_iface_mac_addr_auto(hdd_context_t *pHddCtx,
    int i;
    unsigned int serialno;
    serialno = wcnss_get_serial_number();
-
-   /* BEGIN Motorola, gambugge, IKSWO-55806: Update OUI for WiFi fallback MAC address */
-   /* Motorola OUI */
-   mac_addr.bytes[0] = 0xF0;
-   mac_addr.bytes[1] = 0xD7;
-   mac_addr.bytes[2] = 0xAA;
-   /* END IKSWO-55806 */
 
    if (0 != serialno)
    {
@@ -14579,7 +14535,6 @@ static int hdd_driver_init( void)
    ENTER();
 
    vos_wake_lock_init(&wlan_wake_lock, "wlan");
-   vos_wake_lock_init(&wlan_wake_lock_scan, "wlan_scan"); //Mot IKHSS7-28961: Incorrect empty scan
 
    pr_info("%s: loading driver v%s\n", WLAN_MODULE_NAME,
            QWLAN_VERSIONSTR TIMER_MANAGER_STR MEMORY_DEBUG_STR);
@@ -14601,7 +14556,6 @@ static int hdd_driver_init( void)
    if (max_retries >= 10) {
       hddLog(VOS_TRACE_LEVEL_FATAL,"%s: WCNSS driver not ready", __func__);
       vos_wake_lock_destroy(&wlan_wake_lock);
-      vos_wake_lock_destroy(&wlan_wake_lock_scan);
 #ifdef WLAN_LOGGING_SOCK_SVC_ENABLE
       wlan_logging_sock_deinit_svc();
 #endif
@@ -14674,7 +14628,6 @@ static int hdd_driver_init( void)
       vos_mem_exit();
 #endif
       vos_wake_lock_destroy(&wlan_wake_lock);
-      vos_wake_lock_destroy(&wlan_wake_lock_scan); //Mot IKHSS7-28961: Incorrect empty scan results
 #ifdef WLAN_LOGGING_SOCK_SVC_ENABLE
       wlan_logging_sock_deinit_svc();
 #endif
@@ -14835,7 +14788,6 @@ static void hdd_driver_exit(void)
 
 done:
    vos_wake_lock_destroy(&wlan_wake_lock);
-   vos_wake_lock_destroy(&wlan_wake_lock_scan); //Mot IKHSS7-28961: Incorrect empty scan results
 
    pr_info("%s: driver unloaded\n", WLAN_MODULE_NAME);
 }
@@ -15189,27 +15141,6 @@ wlan_hdd_is_GO_power_collapse_allowed (hdd_context_t* pHddCtx)
           return FALSE;
 
 }
-
-// BEGIN MOTOROLA IKJB42MAIN-274, dpn473, 01/02/2013, Add flag to disable/enable MCC mode
-v_U8_t hdd_get_mcc_mode( void )
-{
-    v_CONTEXT_t pVosContext = vos_get_global_context( VOS_MODULE_ID_HDD, NULL );
-    hdd_context_t *pHddCtx;
-
-    if (NULL != pVosContext)
-    {
-        pHddCtx = vos_get_context( VOS_MODULE_ID_HDD, pVosContext);
-        if (NULL != pHddCtx)
-        {
-            return (v_U8_t)pHddCtx->cfg_ini->enableMCC;
-        }
-    }
-    /* we are in an invalid state :( */
-    hddLog(LOGE, "%s: Invalid context", __func__);
-    return (v_U8_t)0;
-}
-// END IKJB42MAIN-274
-
 /* Decide whether to allow/not the apps power collapse. 
  * Allow apps power collapse if we are in connected state.
  * if not, allow only if we are in IMPS  */
@@ -18294,12 +18225,6 @@ bool hdd_is_cli_iface_up(hdd_context_t *hdd_ctx)
 	return false;
 }
 
-static int sar_changed_handler(const char *kmessage,
-                                  const struct kernel_param *kp)
-{
-   return param_set_copystring(kmessage, kp);
-}
-
 //Register the module init/exit functions
 module_init(hdd_module_init);
 module_exit(hdd_module_exit);
@@ -18315,11 +18240,6 @@ static const struct kernel_param_ops con_mode_ops = {
 
 static const struct kernel_param_ops fwpath_ops = {
 	.set = fwpath_changed_handler,
-	.get = param_get_string,
-};
-
-static const struct kernel_param_ops sar_ops = {
-	.set = sar_changed_handler,
 	.get = param_get_string,
 };
 
@@ -18341,10 +18261,3 @@ module_param(enable_11d, int,
 
 module_param(country_code, charp,
              S_IRUSR | S_IRGRP | S_IROTH);
-
-module_param_cb(sar_sta, &sar_ops, &sar_sta,
-                    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-
-module_param_cb(sar_mhs, &sar_ops, &sar_mhs,
-                    S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-

@@ -6630,296 +6630,6 @@ static int wlan_hdd_cfg80211_firmware_roaming(struct wiphy *wiphy,
     return ret;
 }
 
-//IKLOCSEN-3054, MOTO Gambugge, 10/16/2017 – implement do_acs() in WLAN driver
-/**
- * enum qca_wlan_vendor_attr_acs_offload
- *
- * @QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL: ACS selected primary channel
- * @QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL: ACS selected secondary channel
- * @QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE: hw_mode for ACS
- * @QCA_WLAN_VENDOR_ATTR_ACS_HT_ENABLED: indicate if HT capability is enabled
- * @QCA_WLAN_VENDOR_ATTR_ACS_HT40_ENABLED: indicate HT capability
- */
-enum qca_wlan_vendor_attr_acs_offload {
-    QCA_WLAN_VENDOR_ATTR_ACS_CHANNEL_INVALID = 0,
-    QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL,
-    QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL,
-    QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE,
-    QCA_WLAN_VENDOR_ATTR_ACS_HT_ENABLED,
-    QCA_WLAN_VENDOR_ATTR_ACS_HT40_ENABLED,
-    QCA_WLAN_VENDOR_ATTR_ACS_VHT_ENABLED,
-    QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH,
-    QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST,
-    QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL,
-    QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_CHANNEL,
-    QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST,
-    /* keep last */
-    QCA_WLAN_VENDOR_ATTR_ACS_AFTER_LAST,
-    QCA_WLAN_VENDOR_ATTR_ACS_MAX =
-    QCA_WLAN_VENDOR_ATTR_ACS_AFTER_LAST - 1
-};
-
-/**
- * enum qca_wlan_vendor_acs_hw_mode
- *
- * @QCA_ACS_MODE_IEEE80211B: 11b mode
- * @QCA_ACS_MODE_IEEE80211G: 11g mode
- * @QCA_ACS_MODE_IEEE80211A: 11a mode
- * @QCA_ACS_MODE_IEEE80211AD: 11ad mode
- */
- enum qca_wlan_vendor_acs_hw_mode {
-    QCA_ACS_MODE_IEEE80211B,
-    QCA_ACS_MODE_IEEE80211G,
-    QCA_ACS_MODE_IEEE80211A,
-    QCA_ACS_MODE_IEEE80211AD,
-    QCA_ACS_MODE_IEEE80211ANY,
-};
-
-static const struct nla_policy
-wlan_hdd_cfg80211_do_acs_policy[QCA_WLAN_VENDOR_ATTR_ACS_MAX+1] = {
-    [QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE] = { .type = NLA_U8 },
-    [QCA_WLAN_VENDOR_ATTR_ACS_HT_ENABLED] = { .type = NLA_FLAG },
-    [QCA_WLAN_VENDOR_ATTR_ACS_HT40_ENABLED] = { .type = NLA_FLAG },
-    [QCA_WLAN_VENDOR_ATTR_ACS_VHT_ENABLED] = { .type = NLA_FLAG },
-    [QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH] = { .type = NLA_U16 },
-    [QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST] = { .type = NLA_UNSPEC },
-    [QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST] = { .type = NLA_UNSPEC },
-};
-
-/**
- * wlan_hdd_cfg80211_acs_ch_select_evt: Callback function for ACS evt
- * @adapter: Pointer to SAP adapter struct
- * @pri_channel: SAP ACS procedure selected Primary channel
- * @sec_channel: SAP ACS procedure selected secondary channel
- *
- * This is a callback function from SAP module on ACS procedure is completed.
- * This function send the ACS selected channel information to hostapd
- *
- * Return: None
- */
-
-void wlan_hdd_cfg80211_acs_ch_select_evt(hdd_adapter_t *adapter, tChannelListInfo channel_list)
-{
-    hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
-    struct sk_buff *vendor_event;
-    int ret_val;
-    uint16_t ch_width;
-
-    vendor_event = cfg80211_vendor_event_alloc(hdd_ctx->wiphy,
-        &(adapter->wdev),
-        4 * sizeof(u8) + 1 * sizeof(u16) + 4 + NLMSG_HDRLEN,
-        QCA_NL80211_VENDOR_SUBCMD_DO_ACS_INDEX,
-        GFP_KERNEL);
-    if (!vendor_event) {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "cfg80211_vendor_event_alloc failed");
-        return;
-    }
-
-    ret_val = nla_put_u8(vendor_event,
-        QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL,
-        channel_list.channels[0]);
-    if (ret_val) {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL put fail");
-        kfree_skb(vendor_event);
-        return;
-    }
-
-    ret_val = nla_put_u8(vendor_event,
-        QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL,
-        0); // IKSWO-21203, Moto, gambugge, Fix channel set failure in nl80211 driver
-    if (ret_val) {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL put fail");
-        kfree_skb(vendor_event);
-        return;
-    }
-
-    ch_width = 20;
-
-    ret_val = nla_put_u16(vendor_event,
-        QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH,
-        ch_width);
-    if (ret_val) {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH put fail");
-        kfree_skb(vendor_event);
-        return;
-    }
-
-    if (channel_list.channels[channel_list.num_channels - 1] > 14)
-        ret_val = nla_put_u8(vendor_event,
-            QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE,
-            QCA_ACS_MODE_IEEE80211A);
-    else
-        ret_val = nla_put_u8(vendor_event,
-        QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE,
-        QCA_ACS_MODE_IEEE80211G);
-
-    if (ret_val) {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE put fail");
-        kfree_skb(vendor_event);
-        return;
-    }
-
-    hddLog(VOS_TRACE_LEVEL_INFO, "ACS result for wlan0: PRI_CH: %d SEC_CH: %d",
-        channel_list.channels[0],
-        channel_list.channels[channel_list.num_channels - 1]);
-
-    cfg80211_vendor_event(vendor_event, GFP_KERNEL);
-
-    return;
-}
-
-/**
- * __wlan_hdd_cfg80211_do_acs(): CFG80211 handler function for DO_ACS Vendor CMD
- * @wiphy:  Linux wiphy struct pointer
- * @wdev:   Linux wireless device struct pointer
- * @data:   ACS information from hostapd
- * @data_len: ACS information length
- *
- * This function handle DO_ACS Vendor command from hostapd, parses ACS config
- * and starts ACS procedure.
- *
- * Return: ACS procedure start status
- */
-static int __wlan_hdd_cfg80211_do_acs(struct wiphy *wiphy,
-  struct wireless_dev *wdev,
-  const void *data, int data_len)
-{
-    VOS_STATUS status;
-    struct net_device *dev = wdev->netdev;
-    hdd_adapter_t *pAdapter = WLAN_HDD_GET_PRIV_PTR(dev);
-    tHalHandle hHal = WLAN_HDD_GET_HAL_CTX(pAdapter);
-    tChannelListInfo channel_list;
-    int currentBand = 0;
-    struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_ACS_MAX + 1];
-    uint8_t hw_mode;
-    tpAniSirGlobal pMac = PMAC_STRUCT( hHal ); //IKSWP-4221
-    int i;
-
-    if (NULL == wdev) {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "%s: wdev is Null", __func__);
-        return -ENODEV;
-    }
-
-    if (NULL == wdev->netdev) {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "%s: dev is Null", __func__);
-        return -ENODEV;
-    }
-
-    status = nla_parse(tb, QCA_WLAN_VENDOR_ATTR_ACS_MAX, data, data_len,
-                       wlan_hdd_cfg80211_do_acs_policy);
-    if (status) {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "DO_ACS NL CMD parsing failed");
-        return -EINVAL;
-    }
-
-    if (!tb[QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE]) {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "Attr hw_mode failed");
-        return -EINVAL;
-    }
-    hw_mode = nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE]);
-
-    /* hw_mode = a/b/g: QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST and
-    * QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST attrs are present, and
-    * QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST is used for obtaining the
-    * channel list, QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST is ignored
-    * since it contains the frequency values of the channels in
-    * the channel list.
-    * hw_mode = any: only QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST attr
-    * is present
-    */
-    if (tb[QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST]) {
-        char *tmp = nla_data(tb[QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST]);
-        channel_list.num_channels = nla_len(
-            tb[QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST]);
-        if (channel_list.num_channels) {
-            memcpy(channel_list.channels, tmp,
-                channel_list.num_channels);
-        }
-    } else if (tb[QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST]) {
-        uint32_t *freq =
-        nla_data(tb[QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST]);
-        channel_list.num_channels = nla_len(
-        tb[QCA_WLAN_VENDOR_ATTR_ACS_FREQ_LIST]) /
-        sizeof(uint32_t);
-        if (channel_list.num_channels) {
-        /* convert frequency to channel */
-        for (i = 0; i < channel_list.num_channels; i++)
-            channel_list.channels[i] =
-                ieee80211_frequency_to_channel(freq[i]);
-        }
-    }
-
-    if (channel_list.num_channels >=1) {
-        if (hw_mode == QCA_ACS_MODE_IEEE80211A) {
-            currentBand =
-                (channel_list.channels[channel_list.num_channels - 1] >= 149) ? 3 :
-                (channel_list.channels[channel_list.num_channels - 1] >= 100) ? 2 :
-                (channel_list.channels[channel_list.num_channels - 1] >=  36) ? 1 : 0;
-        } else { // Auto 2.4 Ghz
-            currentBand = 0;
-        }
-    }
-
-    //BEGIN IKSWP-4221
-    if(VOS_TRUE == vos_IsDisableMhsBand1CountryCode(pMac->scan.countryCodeCurrent)) {
-        if(currentBand == 1)
-            currentBand = 0;
-    }
-    //END IKSWP-4221
-
-    hddLog(VOS_TRACE_LEVEL_INFO,
-            "ACS Config for wlan0: HW_MODE: %d NUM CHANNELS: %d START_CH: %d"
-            "END_CH: %d currentBand: %d",
-            hw_mode,
-            channel_list.num_channels,
-            channel_list.channels[0],
-            channel_list.channels[channel_list.num_channels - 1],
-            currentBand);
-
-    status = WLANSAP_SetChannelRange(hHal,
-            channel_list.channels[0],
-            channel_list.channels[channel_list.num_channels - 1],
-            currentBand);
-
-    if (!VOS_IS_STATUS_SUCCESS(status)) {
-        hddLog(VOS_TRACE_LEVEL_ERROR, "%s SetChannelRange Failed!!!",__func__);
-        return -EINVAL;
-    }
-
-    (WLAN_HDD_GET_CTX(pAdapter))->is_dynamic_channel_range_set = 1;
-    (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->apAutoChannelSelection = 1;
-
-    wlan_hdd_cfg80211_acs_ch_select_evt(pAdapter, channel_list);
-
-    return status;
-}
-
-/**
-* wlan_hdd_cfg80211_do_acs : CFG80211 handler function for DO_ACS Vendor CMD
-* @wiphy:  Linux wiphy struct pointer
-* @wdev:   Linux wireless device struct pointer
-* @data:   ACS information from hostapd
-* @data_len: ACS information len
-*
-* This function handle DO_ACS Vendor command from hostapd, parses ACS config
-* and starts ACS procedure.
-*
-* Return: ACS procedure start status
-*/
-static int wlan_hdd_cfg80211_do_acs(struct wiphy *wiphy,
-  struct wireless_dev *wdev,
-  const void *data, int data_len)
-{
-    int ret;
-
-    vos_ssr_protect(__func__);
-    ret = __wlan_hdd_cfg80211_do_acs(wiphy, wdev, data, data_len);
-    vos_ssr_unprotect(__func__);
-
-    return ret;
-}
-//END IKLOCSEN-3054
-
 static const struct
 nla_policy
 qca_wlan_vendor_get_wifi_info_policy[
@@ -9087,16 +8797,6 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] =
                  WIPHY_VENDOR_CMD_NEED_NETDEV,
         .doit = wlan_hdd_cfg80211_get_logger_supp_feature
    },
-    //IKLOCSEN-3054, MOTO Gambugge, 10/16/2017 – implement do_acs() in WLAN driver
-    {
-        .info.vendor_id = QCA_NL80211_VENDOR_ID,
-        .info.subcmd = QCA_NL80211_VENDOR_SUBCMD_DO_ACS,
-        .flags = WIPHY_VENDOR_CMD_NEED_WDEV |
-            WIPHY_VENDOR_CMD_NEED_NETDEV |
-            WIPHY_VENDOR_CMD_NEED_RUNNING,
-        .doit = wlan_hdd_cfg80211_do_acs
-    },
-    //END IKLOCSEN-3054
 };
 
 /* vendor specific events */
@@ -9217,12 +8917,6 @@ struct nl80211_vendor_cmd_info wlan_hdd_cfg80211_vendor_events[] =
          .vendor_id = QCA_NL80211_VENDOR_ID,
          .subcmd = QCA_NL80211_VENDOR_SUBCMD_LINK_PROPERTIES,
     },
-    //IKLOCSEN-3054, MOTO Gambugge, 10/16/2017 – implement do_acs() in WLAN driver
-    [QCA_NL80211_VENDOR_SUBCMD_DO_ACS_INDEX] = {
-        .vendor_id = QCA_NL80211_VENDOR_ID,
-        .subcmd = QCA_NL80211_VENDOR_SUBCMD_DO_ACS
-    },
-    //END IKLOCSEN-3054
 };
 
 /*
@@ -13586,6 +13280,11 @@ static int __wlan_hdd_cfg80211_add_key( struct wiphy *wiphy,
     VOS_STATUS vos_status;
     eHalStatus halStatus;
     hdd_context_t *pHddCtx;
+    uint8_t i;
+    v_MACADDR_t *peerMacAddr;
+    u64 rsc_counter = 0;
+    uint8_t staid = HDD_MAX_STA_COUNT;
+    bool pairwise_set_key = false;
 
     ENTER();
 
@@ -13630,6 +13329,8 @@ static int __wlan_hdd_cfg80211_add_key( struct wiphy *wiphy,
     hddLog(VOS_TRACE_LEVEL_INFO,
            "%s: called with key index = %d & key length %d & seq length %d",
            __func__, key_index, params->key_len, params->seq_len);
+
+    peerMacAddr = (v_MACADDR_t *)mac_addr;
 
     /*extract key idx, key len and key*/
     vos_mem_zero(&setKey,sizeof(tCsrRoamSetKey));
@@ -13742,6 +13443,7 @@ static int __wlan_hdd_cfg80211_add_key( struct wiphy *wiphy,
                 __func__, __LINE__);
         setKey.keyDirection = eSIR_TX_RX;
         vos_mem_copy(setKey.peerMac, mac_addr,WNI_CFG_BSSID_LEN);
+        pairwise_set_key = true;
     }
     if ((WLAN_HDD_IBSS == pAdapter->device_mode) && !pairwise)
     {
@@ -13771,6 +13473,9 @@ static int __wlan_hdd_cfg80211_add_key( struct wiphy *wiphy,
         {
             hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
             vos_status = wlan_hdd_check_ula_done(pAdapter);
+
+            if (peerMacAddr && (pairwise_set_key == true))
+                staid = hdd_sta_id_find_from_mac_addr(pAdapter, peerMacAddr);
 
             if ( vos_status != VOS_STATUS_SUCCESS )
             {
@@ -13832,6 +13537,9 @@ static int __wlan_hdd_cfg80211_add_key( struct wiphy *wiphy,
                 hdd_PerformRoamSetKeyComplete(pAdapter);
             }
         }
+
+        if (pairwise_set_key == true)
+           staid = pHddStaCtx->conn_info.staId[0];
 
         pWextState->roamProfile.Keys.KeyLength[key_index] = (u8)params->key_len;
 
@@ -13938,6 +13646,13 @@ static int __wlan_hdd_cfg80211_add_key( struct wiphy *wiphy,
                 goto end;
             }
         }
+    }
+
+    if (pairwise_set_key == true) {
+       for (i = 0; i < params->seq_len; i++) {
+          rsc_counter |= (params->seq[i] << i*8);
+       }
+       WLANTL_SetKeySeqCounter(pVosContext, rsc_counter, staid);
     }
 
 end:
@@ -15278,13 +14993,6 @@ static eHalStatus hdd_cfg80211_scan_done_callback(tHalHandle halHandle,
          aborted = true;
     }
 
-    if (!aborted) {
-        //Begin Mot IKHSS7-28961 : Dont allow sleep so that supplicant
-        // can fetch scan results before kerenel ages it out if slept immediately
-        // and sleep duration is more than the ageout time.
-        hdd_prevent_suspend_after_scan(HZ/4);
-       //END IKHSS7-28961
-    }
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
     if (NET_DEV_IS_IFF_UP(pAdapter) &&
         wlan_hdd_cfg80211_validate_scan_req(req, pHddCtx))
@@ -20426,21 +20134,9 @@ static int __wlan_hdd_cfg80211_sched_scan_start(struct wiphy *wiphy,
                 pnoRequest.us5GProbeTemplateLen);
     }
 
-#if 0
     hdd_config_sched_scan_plan(&pnoRequest, request, pHddCtx);
-#endif
 
     pnoRequest.modePNO = SIR_PNO_MODE_IMMEDIATE;
-
-    /* framework provides interval in ms */
-    //BEGIN MOT a19110 IKJBMR2-1528 set PNO intervals
-    pnoRequest.scanTimers.ucScanTimersCount = 2;
-    pnoRequest.scanTimers.aTimerValues[0].uTimerRepeat = 7;
-    pnoRequest.scanTimers.aTimerValues[0].uTimerValue = 45;
-    pnoRequest.scanTimers.aTimerValues[1].uTimerRepeat = 0;
-    pnoRequest.scanTimers.aTimerValues[1].uTimerValue = 480;
-    //END IKJBMR2-1528
-
 
     INIT_COMPLETION(pAdapter->pno_comp_var);
     pnoRequest.statusCallback = hdd_cfg80211_sched_scan_start_status_cb;
