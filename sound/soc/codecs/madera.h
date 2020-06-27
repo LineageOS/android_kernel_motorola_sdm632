@@ -82,7 +82,7 @@
 #define MADERA_DSP_CLK_73MHZ		3
 #define MADERA_DSP_CLK_147MHZ		4
 
-#define MADERA_MAX_DAI			17
+#define MADERA_MAX_DAI			18
 #define MADERA_MAX_ADSP			7
 
 #define MADERA_MAX_AIF_SOURCES		32

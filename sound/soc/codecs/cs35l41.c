@@ -201,6 +201,32 @@ static int cs35l41_halo_booted_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int cs35l41_gpi_glob_en_get(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct cs35l41_private *cs35l41 = snd_soc_codec_get_drvdata(codec);
+
+	ucontrol->value.integer.value[0] = cs35l41->gpi_glob_en;
+
+	return 0;
+}
+
+static int cs35l41_gpi_glob_en_put(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct cs35l41_private *cs35l41 = snd_soc_codec_get_drvdata(codec);
+
+	cs35l41->gpi_glob_en = ucontrol->value.integer.value[0];
+
+	if (cs35l41->halo_booted && cs35l41->enabled)
+		regmap_write(cs35l41->regmap, CS35L41_DSP_VIRT1_MBOX_8,
+			     cs35l41->gpi_glob_en);
+
+	return 0;
+}
+
 static const DECLARE_TLV_DB_RANGE(dig_vol_tlv,
 		0, 0, TLV_DB_SCALE_ITEM(TLV_DB_GAIN_MUTE, 0, 1),
 		1, 913, TLV_DB_SCALE_ITEM(-10200, 25, 0));
@@ -217,12 +243,14 @@ static SOC_ENUM_SINGLE_DECL(pcm_sft_ramp,
 			    cs35l41_pcm_sftramp_text);
 
 static const char * const cs35l41_cspl_cmd_text[] = {
+	"CSPL_MBOX_CMD_PAUSE",
 	"CSPL_MBOX_CMD_RESUME",
 	"CSPL_MBOX_CMD_REINIT",
 	"CSPL_MBOX_CMD_STOP_PRE_REINIT",
 };
 
 static const unsigned int cs35l41_cspl_cmd_val[] = {
+	(unsigned int)CSPL_MBOX_CMD_PAUSE,
 	(unsigned int)CSPL_MBOX_CMD_RESUME,
 	(unsigned int)CSPL_MBOX_CMD_REINIT,
 	(unsigned int)CSPL_MBOX_CMD_STOP_PRE_REINIT,
@@ -496,6 +524,8 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 			   cs35l41_cspl_cmd_get, cs35l41_cspl_cmd_put),
 	SOC_SINGLE_EXT("DSP Booted", SND_SOC_NOPM, 0, 1, 0,
 			cs35l41_halo_booted_get, cs35l41_halo_booted_put),
+	SOC_SINGLE_EXT("GLOBAL_EN from GPIO", SND_SOC_NOPM, 0, 1, 0,
+			cs35l41_gpi_glob_en_get, cs35l41_gpi_glob_en_put),
 	WM_ADSP2_PRELOAD_SWITCH("DSP1", 1),
 };
 
@@ -793,6 +823,14 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 					cs35l41_pup_patch,
 					ARRAY_SIZE(cs35l41_pup_patch));
 
+		if (cs35l41->halo_booted)
+			/*
+			 * Set GPIO-controlled GLOBAL_EN by firmware
+			 * according to mixer setting
+			 */
+			regmap_write(cs35l41->regmap, CS35L41_DSP_VIRT1_MBOX_8,
+				     cs35l41->gpi_glob_en);
+
 		regmap_update_bits(cs35l41->regmap, CS35L41_PWR_CTRL1,
 				CS35L41_GLOBAL_EN_MASK,
 				1 << CS35L41_GLOBAL_EN_SHIFT);
@@ -810,6 +848,7 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 		}
 		regmap_update_bits(cs35l41->regmap, CS35L41_AMP_OUT_MUTE,
 				CS35L41_AMP_MUTE_MASK, 0);
+		cs35l41->enabled = true;
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
 		regmap_update_bits(cs35l41->regmap, CS35L41_AMP_OUT_MUTE,
@@ -823,6 +862,10 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 			else
 				ret = cs35l41_set_csplmboxcmd(cs35l41,
 							CSPL_MBOX_CMD_PAUSE);
+
+			/* Disable GPIO-controlled GLOBAL_EN by firmware */
+			regmap_write(cs35l41->regmap,
+				     CS35L41_DSP_VIRT1_MBOX_8, 0);
 		}
 
 		regmap_update_bits(cs35l41->regmap, CS35L41_PWR_CTRL1,
@@ -833,6 +876,7 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 		regmap_multi_reg_write_bypassed(cs35l41->regmap,
 					cs35l41_pdn_patch,
 					ARRAY_SIZE(cs35l41_pdn_patch));
+		cs35l41->enabled = false;
 		break;
 	default:
 		dev_err(codec->dev, "Invalid event = 0x%x\n", event);
@@ -1758,7 +1802,7 @@ static const struct reg_sequence cs35l41_reva0_errata_patch[] = {
 	{CS35L41_IRQ2_DB3,		0x00000000},
 	{CS35L41_DSP1_YM_ACCEL_PL0_PRI,	0x00000000},
 	{CS35L41_DSP1_XM_ACCEL_PL0_PRI,	0x00000000},
-	{CS35L41_ASP_CONTROL4,		0x00000000},
+	{CS35L41_ASP_CONTROL4,		0x01010000},
 	{0x00000040,			0x0000CCCC},
 	{0x00000040,			0x00003333},
 };
@@ -1770,9 +1814,46 @@ static const struct reg_sequence cs35l41_revb0_errata_patch[] = {
 	{CS35L41_BSTCVRT_DCM_CTRL,	0x00000051},
 	{CS35L41_DSP1_YM_ACCEL_PL0_PRI,	0x00000000},
 	{CS35L41_DSP1_XM_ACCEL_PL0_PRI,	0x00000000},
-	{CS35L41_ASP_CONTROL4,		0x00000000},
+	{CS35L41_ASP_CONTROL4,		0x01010000},
 	{0x00000040,			0x0000CCCC},
 	{0x00000040,			0x00003333},
+};
+
+static const struct reg_sequence cs35l41_revb2_errata_patch[] = {
+	{0x00000040,			0x00005555},
+	{0x00000040,			0x0000AAAA},
+	{CS35L41_VIMON_SPKMON_RESYNC,	0x00000000},
+	{0x00004310,			0x00000000},
+	{CS35L41_VPVBST_FS_SEL,		0x00000000},
+	{CS35L41_BSTCVRT_DCM_CTRL,	0x00000051},
+	{CS35L41_DSP1_YM_ACCEL_PL0_PRI,	0x00000000},
+	{CS35L41_DSP1_XM_ACCEL_PL0_PRI,	0x00000000},
+	{CS35L41_ASP_CONTROL4,		0x01010000},
+	{0x00000040,			0x0000CCCC},
+	{0x00000040,			0x00003333},
+};
+
+static const struct reg_sequence cs35l41_set_dsp_to_fs2_patch[] = {
+	/* Set DSPRX to FS2 */
+	{0x02B80080,			0x00000001},
+	{0x02B80088,			0x00000001},
+	{0x02B80090,			0x00000001},
+	{0x02B80098,			0x00000001},
+	{0x02B800A0,			0x00000001},
+	{0x02B800A8,			0x00000001},
+	{0x02B800B0,			0x00000001},
+	{0x02B800B8,			0x00000001},
+	/* Set DSPRX to FS2 */
+	{0x02B80280,			0x00000001},
+	{0x02B80288,			0x00000001},
+	{0x02B80290,			0x00000001},
+	{0x02B80298,			0x00000001},
+	{0x02B802A0,			0x00000001},
+	{0x02B802A8,			0x00000001},
+	{0x02B802B0,			0x00000001},
+	{0x02B802B8,			0x00000001},
+	/* Set FS2 start window to allow BCLK as expected. */
+	{0x00002D10,			0x000A3016}
 };
 
 static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
@@ -1798,6 +1879,10 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 	dsp->n_rx_channels = CS35L41_DSP_N_RX_RATES;
 	dsp->n_tx_channels = CS35L41_DSP_N_TX_RATES;
 	ret = wm_halo_init(dsp, &cs35l41->rate_lock);
+	if (ret <0) {
+		dev_err(cs35l41->dev,
+			"DSP init error %d.\n", ret);
+	}
 	cs35l41->halo_booted = false;
 
 	regmap_write(cs35l41->regmap, CS35L41_DSP1_RX5_SRC,
@@ -1808,6 +1893,13 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 					CS35L41_INPUT_SRC_TEMPMON);
 	regmap_write(cs35l41->regmap, CS35L41_DSP1_RX8_SRC,
 					CS35L41_INPUT_SRC_RSVD);
+	ret = regmap_multi_reg_write(cs35l41->regmap,
+			cs35l41_set_dsp_to_fs2_patch,
+			ARRAY_SIZE(cs35l41_set_dsp_to_fs2_patch));
+	if (ret < 0) {
+		dev_err(cs35l41->dev,
+			"Failed to apply FS2 patch %d.\n", ret);
+	}
 
 	return ret;
 }
@@ -1822,6 +1914,8 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	/* Default to RESUME cmd */
 	cs35l41->cspl_cmd = (unsigned int)CSPL_MBOX_CMD_RESUME;
+	cs35l41->gpi_glob_en = 0;
+	cs35l41->enabled = false;
 
 	for (i = 0; i < ARRAY_SIZE(cs35l41_supplies); i++)
 		cs35l41->supplies[i].supply = cs35l41_supplies[i];
@@ -1927,16 +2021,18 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	init_completion(&cs35l41->global_pdn_done);
 	init_completion(&cs35l41->global_pup_done);
 
-	ret = devm_request_threaded_irq(cs35l41->dev, cs35l41->irq, NULL,
-				cs35l41_irq, IRQF_ONESHOT | irq_pol,
-				"cs35l41", cs35l41);
+	dev_info(cs35l41->dev, "%s: irq %d\n", __func__, cs35l41->irq);
+	if (cs35l41->irq > 0) {
+		ret = devm_request_threaded_irq(cs35l41->dev, cs35l41->irq, NULL,
+					cs35l41_irq, IRQF_ONESHOT | irq_pol,
+					"cs35l41", cs35l41);
 
-	/* CS35L41 needs INT for PDN_DONE */
-	if (ret != 0) {
-		dev_err(cs35l41->dev, "Failed to request IRQ: %d\n", ret);
-		goto err;
+		/* CS35L41 needs INT for PDN_DONE */
+		if (ret != 0) {
+			dev_err(cs35l41->dev, "Failed to request IRQ: %d\n", ret);
+			goto err;
+		}
 	}
-
 	/* Set interrupt masks for critical errors */
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1,
 			CS35L41_INT1_MASK_DEFAULT);
@@ -1962,6 +2058,16 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 			goto err;
 		}
 		break;
+	case CS35L41_REVID_B2:
+		ret = regmap_multi_reg_write(cs35l41->regmap,
+				cs35l41_revb2_errata_patch,
+				ARRAY_SIZE(cs35l41_revb2_errata_patch));
+		if (ret < 0) {
+			dev_err(cs35l41->dev,
+				"Failed to apply B2 errata patch %d\n", ret);
+			goto err;
+		}
+		break;
 	}
 
 	ret = cs35l41_otp_unpack(cs35l41);
@@ -1969,6 +2075,9 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		dev_err(cs35l41->dev, "OTP Unpack failed\n");
 		goto err;
 	}
+
+	regmap_write(cs35l41->regmap,
+			CS35L41_DSP1_CCM_CORE_CTRL, 0);
 
 	mutex_init(&cs35l41->rate_lock);
 

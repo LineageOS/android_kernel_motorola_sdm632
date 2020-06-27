@@ -2211,9 +2211,7 @@ static const struct snd_soc_dapm_route cs47l90_dapm_routes[] = {
 	MADERA_DSP_ROUTES("DSP6"),
 	MADERA_DSP_ROUTES("DSP7"),
 
-	{ "DSP2 Preloader",  NULL, "DSP2 Virtual Input" },
 	{ "DSP2 Virtual Input", "Shared Memory", "DSP3" },
-	{ "DSP3 Preloader", NULL, "DSP3 Virtual Input" },
 	{ "DSP3 Virtual Input", "Shared Memory", "DSP2" },
 
 	{ "DSP1 Trigger Out", NULL, "SYSCLK" },
@@ -2233,15 +2231,12 @@ static const struct snd_soc_dapm_route cs47l90_dapm_routes[] = {
 	{ "DSP6 Trigger Output", "Switch", "DSP6" },
 	{ "DSP7 Trigger Output", "Switch", "DSP7" },
 
-	{ "DSP1 Preloader", NULL, "DSP Virtual Input" },
 	{ "DSP1 Trigger Out", NULL, "DSP1 Virtual Output" },
 	{ "DSP1 Virtual Output", NULL, "SYSCLK" },
 
-	{ "DSP2 Preloader", NULL, "DSP Virtual Input" },
 	{ "DSP2 Trigger Out", NULL, "DSP2 Virtual Output" },
 	{ "DSP2 Virtual Output", NULL, "SYSCLK" },
 
-	{ "DSP3 Preloader", NULL, "DSP Virtual Input" },
 	{ "DSP3 Trigger Out", NULL, "DSP3 Virtual Output" },
 	{ "DSP3 Virtual Output", NULL, "SYSCLK" },
 
@@ -2429,30 +2424,6 @@ static struct snd_soc_dai_driver cs47l90_dai[] = {
 		.symmetric_rates = 1,
 		.symmetric_samplebits = 1,
 	},
-/* slim1 id should be 4
-	{
-		.name = "cs47l90-aif4",
-		.id = 4,
-		.base = MADERA_AIF4_BCLK_CTRL,
-		.playback = {
-			.stream_name = "AIF4 Playback",
-			.channels_min = 1,
-			.channels_max = 2,
-			.rates = MADERA_RATES,
-			.formats = MADERA_FORMATS,
-		},
-		.capture = {
-			 .stream_name = "AIF4 Capture",
-			 .channels_min = 1,
-			 .channels_max = 2,
-			 .rates = MADERA_RATES,
-			 .formats = MADERA_FORMATS,
-		 },
-		.ops = &madera_dai_ops,
-		.symmetric_rates = 1,
-		.symmetric_samplebits = 1,
-	},
-*/
 	{
 		.name = "cs47l90-slim1",
 		.id = 4,
@@ -2490,6 +2461,47 @@ static struct snd_soc_dai_driver cs47l90_dai[] = {
 			 .formats = MADERA_FORMATS,
 		 },
 		.ops = &madera_slim_dai_ops,
+	},
+	{
+		.name = "cs47l90-slim3",
+		.id = 6,
+		.playback = {
+			.stream_name = "Slim3 Playback",
+			.channels_min = 1,
+			.channels_max = 2,
+			.rates = MADERA_RATES,
+			.formats = MADERA_FORMATS,
+		},
+		.capture = {
+			 .stream_name = "Slim3 Capture",
+			 .channels_min = 1,
+			 .channels_max = 2,
+			 .rates = MADERA_RATES,
+			 .formats = MADERA_FORMATS,
+		 },
+		.ops = &madera_slim_dai_ops,
+	},
+	{
+		.name = "cs47l90-aif4",
+		.id = 7,
+		.base = MADERA_AIF4_BCLK_CTRL,
+		.playback = {
+			.stream_name = "AIF4 Playback",
+			.channels_min = 1,
+			.channels_max = 2,
+			.rates = MADERA_RATES,
+			.formats = MADERA_FORMATS,
+		},
+		.capture = {
+			 .stream_name = "AIF4 Capture",
+			 .channels_min = 1,
+			 .channels_max = 2,
+			 .rates = MADERA_RATES,
+			 .formats = MADERA_FORMATS,
+		 },
+		.ops = &madera_dai_ops,
+		.symmetric_rates = 1,
+		.symmetric_samplebits = 1,
 	},
 	{
 		.name = "cs47l90-pdm",
@@ -2958,6 +2970,7 @@ static int cs47l90_probe(struct platform_device *pdev)
 		cs47l90->core.adsp[i].num = i + 1;
 		cs47l90->core.adsp[i].type = WMFW_ADSP2;
 		cs47l90->core.adsp[i].rev = 2;
+		cs47l90->core.adsp[i].suffix = "";
 		cs47l90->core.adsp[i].dev = madera->dev;
 		cs47l90->core.adsp[i].regmap = madera->regmap_32bit;
 

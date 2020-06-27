@@ -617,6 +617,7 @@ bool cs35l41_volatile_reg(struct device *dev, unsigned int reg)
 	case CS35L41_SFT_RESET:
 	case CS35L41_FABID:
 	case CS35L41_REVID:
+	case CS35L41_PWR_CTRL1:
 	case CS35L41_DTEMP_EN:
 	case CS35L41_IRQ1_STATUS:
 	case CS35L41_IRQ1_STATUS1:
@@ -945,6 +946,13 @@ const struct cs35l41_otp_map_element_t
 	{
 		.id = 0x06,
 		.map = otp_map_2,
+		.num_elements = CS35L41_NUM_OTP_ELEM,
+		.bit_offset = 16,
+		.word_offset = 2,
+	},
+	{
+		.id = 0x08,
+		.map = otp_map_1,
 		.num_elements = CS35L41_NUM_OTP_ELEM,
 		.bit_offset = 16,
 		.word_offset = 2,
