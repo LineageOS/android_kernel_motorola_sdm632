@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "95d2233e_49b2476d",
+        "filename": "arch/arm64/configs/ocean_defconfig",
+        "patchSetId": 1
+      },
+      "lineNbr": 1785,
+      "author": {
+        "id": 17793
+      },
+      "writtenOn": "2020-07-10T19:45:08Z",
+      "side": 1,
+      "message": "do we need this touchscreens? \nthe needed ones are in modules",
+      "revId": "5627fc07ded744273805939131c5b3685ac14d57",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "a5147003_50832b1f",
+        "filename": "arch/arm64/configs/ocean_defconfig",
+        "patchSetId": 1
+      },
+      "lineNbr": 3988,
+      "author": {
+        "id": 17793
+      },
+      "writtenOn": "2020-07-10T19:45:08Z",
+      "side": 1,
+      "message": "disable this debug",
+      "revId": "5627fc07ded744273805939131c5b3685ac14d57",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": true
+    }
+  ]
+}
