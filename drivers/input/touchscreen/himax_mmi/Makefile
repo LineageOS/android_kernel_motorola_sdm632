@@ -1,6 +1,6 @@
-# Makefile for the Himax touchscreen drivers.
+# Makefile for the Himax MMI touchscreen drivers.
 
-obj-$(CONFIG_TOUCHSCREEN_HIMAX_MMI) += himax_mmi.o
+obj-$(CONFIG_TOUCHSCREEN_HIMAX_MMI_I2C) += himax_mmi.o
 himax_mmi-objs += himax_ic_HX83112.o
 himax_mmi-objs += himax_ic_HX83102.o
 himax_mmi-objs += himax_platform.o
