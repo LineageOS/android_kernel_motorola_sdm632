@@ -1473,3 +1473,4 @@ config TOUCHSCREEN_ILITEK_CHIPSET
 source "drivers/input/touchscreen/ilitek_mmi/Kconfig"
 
 endif
+
