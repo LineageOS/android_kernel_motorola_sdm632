@@ -22,6 +22,30 @@
       "revId": "812fc0da4935f9a6903641c30402d1e474652bbb",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
       "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "664a3296_2033bf86",
+        "filename": "drivers/input/touchscreen/himax_mmi/Kconfig",
+        "patchSetId": 2
+      },
+      "lineNbr": 53,
+      "author": {
+        "id": 23878
+      },
+      "writtenOn": "2020-08-17T01:06:17Z",
+      "side": 1,
+      "message": "Thanks, should be good now.",
+      "parentUuid": "f705bbbd_6c125998",
+      "range": {
+        "startLine": 5,
+        "startChar": 0,
+        "endLine": 53,
+        "endChar": 50
+      },
+      "revId": "812fc0da4935f9a6903641c30402d1e474652bbb",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": false
     }
   ]
 }
