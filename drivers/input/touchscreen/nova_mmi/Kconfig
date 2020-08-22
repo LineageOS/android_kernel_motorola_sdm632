@@ -3,7 +3,7 @@
 #
 config TOUCHSCREEN_NT36xxx
 	tristate "Novatek NT36xxx"
-	depends on TOUCHSCREEN_NOVATEK_CHIPSET
+	depends on TOUCHSCREEN_NOVATEK_NT36xxx_CHIPSET
 	help
 	  Say Y here if you have a Novatek NT36xxx touchscreen connected
 	  to your system.

@@ -1458,17 +1458,28 @@ config TOUCHSCREEN_EKTF3XXX_CHIPSET
 
 		  If unusre, say N.
 
-config TOUCHSCREEN_NOVATEK_CHIPSET
-        bool "Novatek touchpanel Novatek series"
+config TOUCHSCREEN_NOVATEK_NT36xxx_CHIPSET
+        bool "Novatek touchpanel Novatek NT36xxx series"
         depends on I2C
         help
-          Say Y here if you have a Novatek NT36525  touchscreen.
+          Say Y here if you have a Novatek NT36xxx  touchscreen.
           Novatek controllers are multi touch controllers which can
           report 10 touches at a time.
 
           If unsure, say N.
 
 source "drivers/input/touchscreen/nova_mmi/Kconfig"
+
+config TOUCHSCREEN_NOVATEK_NT36525_CHIPSET
+        bool "Novatek touchpanel Novatek NT36525 series"
+        depends on I2C
+        help
+          Say Y here if you have a Novatek NT36525 touchscreen.
+          Novatek controllers are multi touch controllers which can
+          report 10 touches at a time.
+
+          If unsure, say N.
+
 source "drivers/input/touchscreen/nova_36525_mmi/Kconfig"
 
 config TOUCHSCREEN_ILITEK_CHIPSET

@@ -3,7 +3,7 @@
 #
 config TOUCHSCREEN_NT36525
 	tristate "Novatek NT36525"
-	depends on TOUCHSCREEN_NOVATEK_CHIPSET
+	depends on TOUCHSCREEN_NOVATEK_NT36525_CHIPSET
 	help
 	  Say Y here if you have a Novatek NT36525 touchscreen connected
 	  to your system.
