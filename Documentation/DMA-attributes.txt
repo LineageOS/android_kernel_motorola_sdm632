@@ -143,6 +143,7 @@ So, this provides a way for drivers to avoid those error messages on calls
 where allocation failures are not a problem, and shouldn't bother the logs.
 
 NOTE: At the moment DMA_ATTR_NO_WARN is only implemented on PowerPC.
+<<<<<<< HEAD
 
 DMA_ATTR_STRONGLY_ORDERED
 -------------------------
@@ -215,3 +216,5 @@ accesses to DMA buffers in both privileged "supervisor" and unprivileged
 subsystem that the buffer is fully accessible at the elevated privilege
 level (and ideally inaccessible or at least read-only at the
 lesser-privileged levels).
+=======
+>>>>>>> fd97de9c7b973... Reinstate some of "swiotlb: rework "fix info leak with DMA_FROM_DEVICE""
