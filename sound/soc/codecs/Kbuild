@@ -69,7 +69,6 @@ obj-y += snd_soc_tfa9874.o
 endif
 
 ifeq ($(CONFIG_CHANNEL_DTB), y)
-EXTRA_CFLAGS+=	-Wno-unused-but-set-variable
 tas2560-objs = tas2560-core.o tas2560-misc.o tas2560-codec.o tas2560-regmap.o
 obj-y += tas2560.o
 
