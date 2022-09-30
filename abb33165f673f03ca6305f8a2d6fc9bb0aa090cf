@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "36eaa6e9_293d3633",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 23878
+      },
+      "writtenOn": "2022-09-30T09:52:56Z",
+      "side": 1,
+      "message": "Not mandatory for river and ocean (yet) but support should be there for future proofing. ",
+      "revId": "abb33165f673f03ca6305f8a2d6fc9bb0aa090cf",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
