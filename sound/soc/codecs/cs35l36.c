@@ -937,8 +937,14 @@ static int cs35l36_codec_probe(struct snd_soc_codec *codec)
 				CS35L36_BST_IPK_MASK,
 				cs35l36->pdata.bst_ipk);
 
-	if (cs35l36->pdata.boost_ind)
+	if (cs35l36->pdata.boost_ind) {
 		ret = cs35l36_boost_inductor(cs35l36, cs35l36->pdata.boost_ind);
+		if (ret < 0) {
+			dev_err(cs35l36->dev,
+			"Boost inductor config failed(%d)\n", ret);
+		return ret;
+		}
+	}
 
 	if (cs35l36->pdata.temp_warn_thld)
 		regmap_update_bits(cs35l36->regmap, CS35L36_DTEMP_WARN_THLD,
