@@ -26,6 +26,7 @@ EXTRA_CFLAGS += -Werror
 
 ifeq ($(CONFIG_RIVER_DTB), y)
 EXTRA_CFLAGS += -DCONFIG_SND_SOC_AOV_TRIGGER
+EXTRA_CFLAGS += -Wno-unused-but-set-variable
 cirrus_madera-objs = madera.o madera-slimbus.o
 obj-y += cirrus_madera.o
 
