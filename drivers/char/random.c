@@ -296,7 +296,7 @@ static void crng_fast_key_erasure(u8 key[CHACHA_KEY_SIZE],
 	chacha_init_consts(chacha_state);
 	memcpy(&chacha_state[4], key, CHACHA_KEY_SIZE);
 	memset(&chacha_state[12], 0, sizeof(u32) * 4);
-	chacha_block(chacha_state, first_block);
+	chacha20_block(chacha_state, first_block);
 
 	memcpy(key, first_block, CHACHA_KEY_SIZE);
 	memcpy(random_data, first_block + CHACHA_KEY_SIZE, random_data_len);
@@ -411,13 +411,13 @@ static void _get_random_bytes(void *buf, size_t len)
 
 	while (len) {
 		if (len < CHACHA_BLOCK_SIZE) {
-			chacha_block(chacha_state, tmp);
+			chacha20_block(chacha_state, tmp);
 			memcpy(buf, tmp, len);
 			memzero_explicit(tmp, sizeof(tmp));
 			break;
 		}
 
-		chacha_block(chacha_state, buf);
+		chacha20_block(chacha_state, buf);
 		if (unlikely(chacha_state[12] == 0))
 			++chacha_state[13];
 		len -= CHACHA_BLOCK_SIZE;
@@ -466,13 +466,13 @@ static ssize_t get_random_bytes_user(struct iov_iter *iter)
 	 */
 
 	if (iov_iter_count(iter) <= CHACHA_KEY_SIZE) {
-		ret = copy_to_iter(&chacha_state[4], CHACHA20_KEY_SIZE, iter);
+		ret = copy_to_iter(&chacha_state[4], CHACHA_KEY_SIZE, iter);
 		goto out_zero_chacha;
 	}
 
 
 	for (;;) {
-		chacha_block(chacha_state, block);
+		chacha20_block(chacha_state, block);
 		if (unlikely(chacha_state[12] == 0))
 			++chacha_state[13];
 
@@ -508,9 +508,9 @@ struct batch_ ##type {								\
 	 * remaining 32 bytes from fast key erasure, plus one full		\
 	 * block from the detached ChaCha state. We can increase		\
 	 * the size of this later if needed so long as we keep the		\
-	 * formula of (integer_blocks + 0.5) * CHACHA20_BLOCK_SIZE.		\
+	 * formula of (integer_blocks + 0.5) * CHACHA_BLOCK_SIZE.		\
 	 */									\
-	type entropy[CHACHA20_BLOCK_SIZE * 3 / (2 * sizeof(type))];		\
+	type entropy[CHACHA_BLOCK_SIZE * 3 / (2 * sizeof(type))];		\
 	unsigned long generation;						\
 	unsigned int position;							\
 };										\
@@ -641,29 +641,6 @@ static struct {
 static void _mix_pool_bytes(const void *buf, size_t len)
 {
 	blake2s_update(&input_pool.hash, buf, len);
-}
-
-/*
- * This function adds bytes into the input pool. It does not
- * update the initialization bit counter; the caller should call
- * credit_init_bits if this is appropriate.
- */
-static void crng_fast_key_erasure(u8 key[CHACHA_KEY_SIZE],
-				  u32 chacha_state[CHACHA_BLOCK_SIZE / sizeof(u32)],
-				  u8 *random_data, size_t random_data_len)
-{
-	u8 first_block[CHACHA_BLOCK_SIZE];
-
-	BUG_ON(random_data_len > 32);
-
-	chacha_init_consts(chacha_state);
-	memcpy(&chacha_state[4], key, CHACHA_KEY_SIZE);
-	memset(&chacha_state[12], 0, sizeof(u32) * 4);
-	chacha_block(chacha_state, first_block);
-
-	memcpy(key, first_block, CHACHA_KEY_SIZE);
-	memcpy(random_data, first_block + CHACHA_KEY_SIZE, random_data_len);
-	memzero_explicit(first_block, sizeof(first_block));
 }
 
 static void mix_pool_bytes(const void *buf, size_t len)
