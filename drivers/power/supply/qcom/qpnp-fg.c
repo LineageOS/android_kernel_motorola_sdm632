@@ -4162,7 +4162,7 @@ static int set_prop_enable_charging(struct fg_chip *chip, bool enable)
 	}
 
 	rc = power_supply_set_property(chip->batt_psy,
-			POWER_SUPPLY_PROP_BATTERY_CHARGING_ENABLED,
+			POWER_SUPPLY_PROP_CHARGING_ENABLED,
 			&ret);
 	if (rc) {
 		pr_err("couldn't configure batt chg %d\n", rc);
