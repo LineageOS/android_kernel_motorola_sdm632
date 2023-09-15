@@ -22,6 +22,30 @@
       },
       "revId": "f28a12d944208f65e830196f34dd515a1e4c96e6",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "d8fd584d_da0f3622",
+        "filename": "arch/arm64/configs/river_defconfig",
+        "patchSetId": 1
+      },
+      "lineNbr": 3874,
+      "author": {
+        "id": 24773
+      },
+      "writtenOn": "2023-09-15T04:37:26Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "e9efebf8_6d0a41a1",
+      "range": {
+        "startLine": 3873,
+        "startChar": 0,
+        "endLine": 3874,
+        "endChar": 60
+      },
+      "revId": "f28a12d944208f65e830196f34dd515a1e4c96e6",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
