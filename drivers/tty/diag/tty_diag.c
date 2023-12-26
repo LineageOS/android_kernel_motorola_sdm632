@@ -315,7 +315,7 @@ int tty_diag_channel_write(struct usb_diag_ch *diag_ch,
 }
 EXPORT_SYMBOL(tty_diag_channel_write);
 
-void tty_diag_channel_abandon_request()
+void tty_diag_channel_abandon_request(void)
 {
 	unsigned long flags;
 
@@ -325,7 +325,7 @@ void tty_diag_channel_abandon_request()
 }
 EXPORT_SYMBOL(tty_diag_channel_abandon_request);
 
-int tty_diag_get_dbg_ftm_flag_value()
+int tty_diag_get_dbg_ftm_flag_value(void)
 {
 	return dbg_ftm_flag;
 }
