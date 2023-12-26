@@ -344,7 +344,7 @@ static void lim_state_info_dump(void)
  * lim_register_debug_callback() - registration function for lim layer
  * to print lim state information
   */
-void lim_register_debug_callback()
+void lim_register_debug_callback(void)
 {
     vos_register_debug_callback(VOS_MODULE_ID_PE, &lim_state_info_dump);
 }

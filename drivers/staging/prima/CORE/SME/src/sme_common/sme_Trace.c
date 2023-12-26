@@ -282,7 +282,7 @@ static void sme_state_info_dump(void)
  * sme_register_debug_callback() - registration function sme layer
  * to print sme state information
  */
-void sme_register_debug_callback()
+void sme_register_debug_callback(void)
 {
     vos_register_debug_callback(VOS_MODULE_ID_SME, &sme_state_info_dump);
 }
