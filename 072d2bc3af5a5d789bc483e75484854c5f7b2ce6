@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "aaafe8c4_6b606c1c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 33820
+      },
+      "writtenOn": "2024-06-05T03:13:47Z",
+      "side": 1,
+      "message": "Many users in the community complain about choking and high battery drain in performance mode. And others who don\u0027t want to use root are even running scripts in termux to change the governor.",
+      "revId": "072d2bc3af5a5d789bc483e75484854c5f7b2ce6",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
