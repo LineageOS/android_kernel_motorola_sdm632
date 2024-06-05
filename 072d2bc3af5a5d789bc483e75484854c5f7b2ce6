@@ -51,6 +51,23 @@
       "message": "Leaving testing / decision / merge on this to ROMSG",
       "revId": "072d2bc3af5a5d789bc483e75484854c5f7b2ce6",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "83232953_22136e26",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 24830
+      },
+      "writtenOn": "2024-06-05T10:01:44Z",
+      "side": 1,
+      "message": "This is intentional, for boot time performance, the performance governor is used by default and set to schedutil after the device is done booting by init.qcom.post_boot.sh.\n\nIn any case, if the switch is not done in post boot, the issue lies there, and not here.",
+      "revId": "072d2bc3af5a5d789bc483e75484854c5f7b2ce6",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
