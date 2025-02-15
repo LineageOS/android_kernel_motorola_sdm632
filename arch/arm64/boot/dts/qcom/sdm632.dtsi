@@ -22,7 +22,7 @@
 	qcom,msm-name = "SDM632";
 
 	chosen {
-		bootargs = "kpti=0";
+		bootargs = "kpti=0 cgroup.memory=nokmem,nosocket";
 	};
 };
 
